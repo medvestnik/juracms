@@ -15,34 +15,40 @@ jobs:
     name: Deploy to production server
     runs-on: ubuntu-latest
 
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_PHP: ${{ secrets.DEPLOY_PHP }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Validate Jura CMS structure
         run: |
-          test -f index.php || (echo "ERROR: index.php must be located in 
-repository root" && exit 1)
+          test -f index.php || (echo "ERROR: index.php must be located in repository root" && exit 1)
 
       - name: Prepare SSH
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ 
-secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy files via rsync
         run: |
           rsync -az --delete \
-            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.DEPLOY_PORT }} -o 
-StrictHostKeyChecking=yes" \
+            -e "ssh -i ~/.ssh/deploy_key -p ${DEPLOY_PORT} -o StrictHostKeyChecking=yes" \
             --exclude=".git/" \
             --exclude=".github/" \
             --exclude=".env" \
+            --exclude="composer.phar" \
             --exclude="node_modules/" \
             --exclude="vendor/" \
             --exclude="uploads/" \
@@ -50,21 +56,20 @@ StrictHostKeyChecking=yes" \
             --exclude="cache/" \
             --exclude="tmp/" \
             --exclude="logs/" \
-            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ 
-secrets.DEPLOY_PATH }}/"
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
 
       - name: Run remote post-deploy commands
         run: |
           ssh -i ~/.ssh/deploy_key \
-            -p "${{ secrets.DEPLOY_PORT }}" \
+            -p "$DEPLOY_PORT" \
             -o StrictHostKeyChecking=yes \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" << 
-'EOF'
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' DEPLOY_PHP='${DEPLOY_PHP}' bash -s" <<'REMOTE'
               set -e
 
-              cd "${{ secrets.DEPLOY_PATH }}"
+              cd "$DEPLOY_PATH"
 
-              PHP_BIN="${{ secrets.DEPLOY_PHP }}"
+              PHP_BIN="$DEPLOY_PHP"
 
               echo "Current path:"
               pwd
@@ -88,7 +93,7 @@ secrets.DEPLOY_PATH }}/"
                     --optimize-autoloader \
                     --no-interaction
                 elif command -v composer >/dev/null 2>&1; then
-                  "$PHP_BIN" "$(command -v composer)" install \
+                  composer install \
                     --no-dev \
                     --prefer-dist \
                     --optimize-autoloader \
@@ -104,4 +109,4 @@ secrets.DEPLOY_PATH }}/"
               chmod -R 775 uploads storage cache tmp logs || true
 
               echo "Deploy finished successfully"
-          EOF
+          REMOTE
