@@ -1,0 +1,107 @@
+name: Deploy Jura CMS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: jura-cms-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to production server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Jura CMS structure
+        run: |
+          test -f index.php || (echo "ERROR: index.php must be located in 
+repository root" && exit 1)
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ 
+secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy files via rsync
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.DEPLOY_PORT }} -o 
+StrictHostKeyChecking=yes" \
+            --exclude=".git/" \
+            --exclude=".github/" \
+            --exclude=".env" \
+            --exclude="node_modules/" \
+            --exclude="vendor/" \
+            --exclude="uploads/" \
+            --exclude="storage/" \
+            --exclude="cache/" \
+            --exclude="tmp/" \
+            --exclude="logs/" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ 
+secrets.DEPLOY_PATH }}/"
+
+      - name: Run remote post-deploy commands
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            -o StrictHostKeyChecking=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" << 
+'EOF'
+              set -e
+
+              cd "${{ secrets.DEPLOY_PATH }}"
+
+              PHP_BIN="${{ secrets.DEPLOY_PHP }}"
+
+              echo "Current path:"
+              pwd
+
+              echo "Checking Jura CMS root index.php..."
+              test -f index.php
+
+              echo "PHP version:"
+              "$PHP_BIN" -v
+
+              echo "Creating writable directories if missing..."
+              mkdir -p uploads storage cache tmp logs
+
+              if [ -f composer.json ]; then
+                echo "composer.json found, running composer install..."
+
+                if [ -f composer.phar ]; then
+                  "$PHP_BIN" composer.phar install \
+                    --no-dev \
+                    --prefer-dist \
+                    --optimize-autoloader \
+                    --no-interaction
+                elif command -v composer >/dev/null 2>&1; then
+                  "$PHP_BIN" "$(command -v composer)" install \
+                    --no-dev \
+                    --prefer-dist \
+                    --optimize-autoloader \
+                    --no-interaction
+                else
+                  echo "Composer not found, skipping composer install"
+                fi
+              else
+                echo "composer.json not found, skipping composer install"
+              fi
+
+              echo "Setting permissions..."
+              chmod -R 775 uploads storage cache tmp logs || true
+
+              echo "Deploy finished successfully"
+          EOF

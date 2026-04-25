@@ -1,0 +1,26 @@
+# Environment
+.env
+.env.*
+
+# Composer executable
+composer.phar
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Runtime/user files
+/uploads/
+/storage/
+/cache/
+/tmp/
+/logs/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
