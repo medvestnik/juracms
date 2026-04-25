@@ -1,0 +1,16 @@
+{
+  "name": "juracms/juracms",
+  "description": "Jura CMS MVP core",
+  "type": "project",
+  "require": {
+    "php": ">=8.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "app/"
+    },
+    "files": [
+      "app/helpers.php"
+    ]
+  }
+}

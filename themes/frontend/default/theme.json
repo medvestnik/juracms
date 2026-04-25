@@ -1,0 +1,7 @@
+{
+  "name": "Jura Default",
+  "slug": "default",
+  "version": "0.1.0",
+  "type": "frontend",
+  "ui_kit": "jura-ui"
+}

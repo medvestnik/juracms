@@ -1,0 +1,7 @@
+{
+  "name": "Jura Admin",
+  "slug": "jura",
+  "version": "0.1.0",
+  "type": "admin",
+  "ui_kit": "jura-ui"
+}
