@@ -50,6 +50,22 @@ if (!function_exists('view_frontend')) {
     }
 }
 
+
+
+if (!function_exists('installer_warning')) {
+    function installer_warning(): ?string
+    {
+        return \Core\Installer\Runtime::installWarning();
+    }
+}
+
+if (!function_exists('editor_config')) {
+    function editor_config(): array
+    {
+        return (array) config_value('editor', []);
+    }
+}
+
 if (!function_exists('csrf_token')) {
     function csrf_token(): string
     {

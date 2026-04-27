@@ -1,0 +1,9 @@
+.simple-js-editor {
+  min-height: 320px;
+  border: 1px solid #cfd6e4;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: inherit;
+  line-height: 1.5;
+  background: #fff;
+}
