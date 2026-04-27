@@ -18,7 +18,7 @@
             <a href="/admin/pages">Pages</a>
             <a href="/admin/media">Media</a>
             <a href="/admin/settings">Settings</a>
-            <a href="/install">Installer</a>
+            <a href="/admin/system/updates">Updates</a>
         </nav>
     </aside>
 
@@ -27,6 +27,12 @@
             <strong><?= e($title ?? ''); ?></strong>
             <span class="jura-badge">MVP</span>
         </header>
+
+        <?php if (installer_warning()): ?>
+            <section class="jura-content" style="padding-bottom: 0;">
+                <?php View::component('alert', ['type' => 'warning', 'message' => installer_warning()]); ?>
+            </section>
+        <?php endif; ?>
 
         <section class="jura-content">
             <?php include $viewFile; ?>

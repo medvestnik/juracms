@@ -1,7 +1,9 @@
 <?php use App\Core\View; ?>
 <h1>Pages</h1>
 <div class="jura-actions">
-    <a href="#" class="jura-btn jura-btn-primary">Create page</a>
+    <a href="/admin/pages/edit" class="jura-btn jura-btn-primary">Create page</a>
+    <a href="/admin/articles/edit" class="jura-btn jura-btn-secondary">Create article</a>
+    <a href="/admin/blocks/edit" class="jura-btn jura-btn-secondary">Create block</a>
 </div>
 
 <?php View::component('table', [

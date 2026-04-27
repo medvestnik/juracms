@@ -18,10 +18,12 @@ final class Asset
                 self::ui('jura_ui_css'),
                 '/public/assets/jura-ui/themes/' . config_value('ui.appearance.default_mode', 'light') . '.css',
                 self::ui('admin_css'),
+                '/public/assets/admin/editor/simple-js-editor.css',
             ],
             'js' => [
                 self::ui('jura_ui_js'),
                 self::ui('admin_js'),
+                '/public/assets/admin/editor/simple-js-editor.js',
             ],
         ];
     }
