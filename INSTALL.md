@@ -1,7 +1,18 @@
 # INSTALL
 
-1. Upload Jura CMS files to hosting.
-2. Open site root (`/`) in browser.
-3. If `storage/installed.lock` is missing, installer from `/install/` starts automatically.
-4. Complete setup steps and finish installation.
-5. Delete or disable `/install/` directory after installation.
+1. Загрузите файлы Jura CMS в корень сайта.
+2. Настройте права записи для директорий: `storage/`, `uploads/`, `cache/`, `logs/`.
+3. Откройте домен сайта (корень `/`).
+4. Если `storage/installed.lock` отсутствует, CMS автоматически перенаправит на `/install/`.
+5. Пройдите мастер `/install/` и завершите установку.
+6. После установки удалите или отключите каталог `/install/`.
+
+## MVP-статус установщика
+
+Текущий MVP-установщик:
+
+- проверяет базовую диагностику окружения и доступность директорий;
+- создает/проверяет структуру директорий (`storage`, `storage/backups`, `storage/updates`, `uploads`, `cache`, `logs`);
+- создает `storage/installed.lock`.
+
+Шаги полноценной установки (БД, `.env`, администратор, миграции) запланированы для следующих итераций.

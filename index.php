@@ -2,7 +2,11 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/vendor/autoload.php';
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (is_file($autoload)) {
+    require_once $autoload;
+}
+
 require_once __DIR__ . '/core/start.php';
 
 use Core\Installer\Runtime as InstallerRuntime;
@@ -12,7 +16,7 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 if (!InstallerRuntime::isInstalled()) {
-    require BASE_PATH . '/install/index.php';
+    header('Location: /install/');
     exit;
 }
 

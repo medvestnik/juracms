@@ -10,11 +10,21 @@ composer.phar
 /node_modules/
 
 # Runtime/user files
-/uploads/
-/storage/
-/cache/
+/uploads/*
+!/uploads/.gitkeep
+/storage/*
+!/storage/.gitkeep
+!/storage/backups/
+!/storage/updates/
+/storage/backups/*
+!/storage/backups/.gitkeep
+/storage/updates/*
+!/storage/updates/.gitkeep
+/cache/*
+!/cache/.gitkeep
 /tmp/
-/logs/
+/logs/*
+!/logs/.gitkeep
 
 # OS/editor files
 .DS_Store
