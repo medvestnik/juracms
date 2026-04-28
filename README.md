@@ -15,8 +15,10 @@ Jura CMS keeps a classic CMS bootstrap flow with a modern core architecture.
 
 ## Install flow
 
-On first launch, if `storage/installed.lock` does not exist, CMS runs `/install/index.php`.
-After completion a lock file is created, and reinstall is blocked.
+- On first launch, if `storage/installed.lock` does not exist, CMS redirects from `/` to `/install/`.
+- Installer at `/install/` can be opened directly and works as a standalone entry point.
+- MVP installer creates `storage/installed.lock`, prepares runtime directories, and blocks repeated installation.
+- After completion, remove or disable `/install/` for production security.
 
 ## Update flow
 
