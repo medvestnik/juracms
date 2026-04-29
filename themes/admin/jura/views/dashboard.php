@@ -18,11 +18,12 @@
 
     <section class="jura-card">
         <h2>System status</h2>
-        <?php View::component('alert', ['type' => 'success', 'message' => 'MVP core is running.']); ?>
+        <?php View::component('alert', ['type' => 'success', 'message' => 'Admin area is protected by authentication.']); ?>
         <ul>
             <li>Frontend theme: default</li>
             <li>Admin theme: jura</li>
-            <li>Installer: placeholder mode</li>
+            <li>Installer: web installer completed</li>
+            <li>Signed in as: <?= e($_SESSION['admin_user_email'] ?? ''); ?></li>
         </ul>
     </section>
 </div>

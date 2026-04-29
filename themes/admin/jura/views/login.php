@@ -1,9 +1,13 @@
 <?php use App\Core\View; ?>
 <section class="jura-card jura-auth-card">
     <h1>Sign in</h1>
-    <?php View::component('alert', ['type' => 'info', 'message' => 'TODO: implement authentication']); ?>
-    <form method="post" action="#">
-        <input type="hidden" name="_token" value="<?= e(csrf_token()); ?>">
+    <?php if (!empty($error)): ?>
+        <?php View::component('alert', ['type' => 'danger', 'message' => (string) $error]); ?>
+    <?php endif; ?>
+    <?php if ($flash = session_flash('auth_success')): ?>
+        <?php View::component('alert', ['type' => 'success', 'message' => $flash]); ?>
+    <?php endif; ?>
+    <form method="post" action="/admin/login">
         <?php View::component('input', ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'placeholder' => 'admin@example.com']); ?>
         <?php View::component('input', ['name' => 'password', 'label' => 'Password', 'type' => 'password']); ?>
         <div class="jura-actions">
