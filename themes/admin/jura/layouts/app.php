@@ -25,7 +25,7 @@
     <main class="jura-main">
         <header class="jura-topbar">
             <strong><?= e($title ?? ''); ?></strong>
-            <span class="jura-badge">MVP</span>
+            <form method="post" action="/admin/logout"><button class="jura-btn jura-btn-secondary" type="submit">Logout</button></form>
         </header>
 
         <?php if (installer_warning()): ?>

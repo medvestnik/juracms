@@ -84,3 +84,25 @@ button {
     color: var(--muted);
     word-break: break-word;
 }
+
+.installer-success {
+    border: 1px solid #a7f3d0;
+    background: #ecfdf3;
+    color: #027a48;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+input {
+    width: 100%;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+button[disabled] {
+    opacity: .5;
+    cursor: not-allowed;
+}
