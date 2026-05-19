@@ -11,9 +11,28 @@ final class Runtime
         return BASE_PATH . '/storage/installed.lock';
     }
 
+    public static function configFile(): string
+    {
+        return BASE_PATH . '/config.php';
+    }
+
+    public static function config(): array
+    {
+        $file = self::configFile();
+        if (!is_file($file)) {
+            return [];
+        }
+
+        $config = require $file;
+        return is_array($config) ? $config : [];
+    }
+
     public static function isInstalled(): bool
     {
-        return is_file(self::lockFile());
+        $config = self::config();
+        $installedFlag = (bool) ($config['app']['installed'] ?? false);
+
+        return is_file(self::configFile()) && $installedFlag === true && is_file(self::lockFile());
     }
 
     public static function installerExists(): bool

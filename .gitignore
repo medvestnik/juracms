@@ -1,6 +1,7 @@
 # Environment
 .env
 .env.*
+/config.php
 
 # Composer executable
 composer.phar

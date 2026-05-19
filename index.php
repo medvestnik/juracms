@@ -16,10 +16,6 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 if (!InstallerRuntime::isInstalled()) {
-    if (str_starts_with($path, '/admin')) {
-        redirect('/install/');
-    }
-
     if ($path !== '/install' && $path !== '/install/') {
         redirect('/install/');
     }
@@ -41,6 +37,32 @@ switch (rtrim($path, '/') ?: '/') {
             redirect('/install/');
         }
 
+        $dbConfig = (array) cms_config('database', []);
+        $prefix = preg_replace('/[^a-zA-Z0-9_]/', '', (string) ($dbConfig['prefix'] ?? 'jura_')) ?: 'jura_';
+
+        try {
+            $pdo = db_connect($dbConfig);
+            $table = sprintf('`%sadmins`', str_replace('`', '', $prefix));
+            $countStmt = $pdo->query("SELECT COUNT(*) AS cnt FROM {$table}");
+            $adminsCount = (int) (($countStmt->fetch()['cnt'] ?? 0));
+
+            if ($adminsCount < 1) {
+                view_admin('login', [
+                    'title' => 'Sign in',
+                    'layout' => 'auth',
+                    'error' => 'Администратор не найден. Установка неполная. Перейдите в /install/ и выполните сброс установки.',
+                ]);
+                break;
+            }
+        } catch (Throwable $e) {
+            view_admin('login', [
+                'title' => 'Sign in',
+                'layout' => 'auth',
+                'error' => 'Ошибка подключения к БД. Перейдите в /install/ и выполните проверку установки.',
+            ]);
+            break;
+        }
+
         if ($method === 'POST') {
             $email = trim((string) ($_POST['email'] ?? ''));
             $password = (string) ($_POST['password'] ?? '');
@@ -50,12 +72,8 @@ switch (rtrim($path, '/') ?: '/') {
                 redirect('/admin/login');
             }
 
-            $lock = json_decode((string) @file_get_contents(InstallerRuntime::lockFile()), true);
-            $dbConfig = (array) ($lock['database'] ?? []);
-
             try {
                 $pdo = db_connect($dbConfig);
-                $prefix = (string) ($dbConfig['prefix'] ?? 'jura_');
                 $table = sprintf('`%sadmins`', str_replace('`', '', $prefix));
                 $stmt = $pdo->prepare("SELECT id, email, password_hash FROM {$table} WHERE email = :email LIMIT 1");
                 $stmt->execute(['email' => $email]);
@@ -101,69 +119,12 @@ switch (rtrim($path, '/') ?: '/') {
         view_admin('dashboard', ['title' => 'Dashboard']);
         break;
 
-    case '/admin/pages':
-        admin_require_auth();
-        view_admin('pages/index', ['title' => 'Pages']);
-        break;
-
-    case '/admin/pages/edit':
-        admin_require_auth();
-        view_admin('pages/editor', ['title' => 'Edit page']);
-        break;
-
-    case '/admin/articles/edit':
-        admin_require_auth();
-        view_admin('pages/editor', ['title' => 'Edit article', 'entity' => 'article']);
-        break;
-
-    case '/admin/blocks/edit':
-        admin_require_auth();
-        view_admin('pages/editor', ['title' => 'Edit block', 'entity' => 'block']);
-        break;
-
-    case '/admin/media':
-        admin_require_auth();
-        view_admin('media/index', ['title' => 'Media']);
-        break;
-
-    case '/admin/settings':
-        admin_require_auth();
-        view_admin('settings/index', ['title' => 'Settings']);
-        break;
-
-    case '/admin/system/updates':
-        admin_require_auth();
-        view_admin('updates/index', [
-            'title' => 'System Updates',
-            'update' => Updater::checkForUpdates(),
-            'requiresFinalize' => Updater::needsManualFinalize(),
-        ]);
-        break;
-
-    case '/admin/system/updates/run':
-        admin_require_auth();
-        Updater::finalizeManualUpdate();
-        view_admin('updates/index', [
-            'title' => 'System Updates',
-            'update' => Updater::runAutomaticUpdate(),
-            'requiresFinalize' => false,
-            'flash' => 'Обновление запущено: миграции и очистка кэша помечены как выполненные (MVP).',
-        ]);
-        break;
-
     case '/install':
-        view_admin('install', [
-            'title' => 'Installer is disabled',
-            'layout' => 'installer',
-            'warning' => 'Jura CMS уже установлена. Повторная установка заблокирована. Удалите /install для безопасности.',
-        ]);
+        require __DIR__ . '/install/index.php';
         break;
 
     default:
         http_response_code(404);
-        view_frontend('page', [
-            'title' => 'Page not found',
-            'message' => 'The requested page was not found.',
-        ]);
+        view_frontend('page', ['title' => 'Page not found', 'message' => 'The requested page was not found.']);
         break;
 }
