@@ -30,6 +30,33 @@ if (!function_exists('config_value')) {
     }
 }
 
+
+if (!function_exists('cms_config')) {
+    function cms_config(?string $key = null, mixed $default = null): mixed
+    {
+        static $config = null;
+        if ($config === null) {
+            $file = BASE_PATH . '/config.php';
+            $data = is_file($file) ? require $file : [];
+            $config = is_array($data) ? $data : [];
+        }
+
+        if ($key === null || $key == '') {
+            return $config;
+        }
+
+        $value = $config;
+        foreach (explode('.', $key) as $part) {
+            if (!is_array($value) || !array_key_exists($part, $value)) {
+                return $default;
+            }
+            $value = $value[$part];
+        }
+
+        return $value;
+    }
+}
+
 if (!function_exists('asset_url')) {
     function asset_url(string $path): string
     {
@@ -129,7 +156,8 @@ if (!function_exists('session_flash')) {
 if (!function_exists('db_connect')) {
     function db_connect(array $db): PDO
     {
-        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $db['host'], $db['port'], $db['database']);
+        $charset = (string) ($db['charset'] ?? 'utf8mb4');
+        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=%s', $db['host'], $db['port'], $db['database'], $charset);
         return new PDO($dsn, (string) $db['username'], (string) $db['password'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
