@@ -47,7 +47,17 @@ if ($installed) {
     include __DIR__ . '/views/installed.php';
     exit;
 }
-$_SESSION['installer']=$_SESSION['installer']??['step'=>1,'db'=>['host'=>'127.0.0.1','port'=>'3306','database'=>'','username'=>'','password'=>'','prefix'=>'jura_'],'admin'=>['site_name'=>'Jura CMS','admin_name'=>'','admin_email'=>'']];
+$installerDefaults = [
+    'step' => 1,
+    'db' => ['host' => '127.0.0.1', 'port' => '3306', 'database' => '', 'username' => '', 'password' => '', 'prefix' => 'jura_'],
+    'admin' => ['site_name' => 'Jura CMS', 'admin_name' => '', 'admin_email' => ''],
+];
+$installerState = $_SESSION['installer'] ?? [];
+if (!is_array($installerState)) { $installerState = []; }
+$installerState = array_replace_recursive($installerDefaults, $installerState);
+if (!isset($installerState['step']) || !is_numeric($installerState['step'])) { $installerState['step'] = 1; }
+$installerState['step'] = max(1, min(4, (int) $installerState['step']));
+$_SESSION['installer'] = $installerState;
 $state=&$_SESSION['installer']; $step=(int)$state['step']; $errors=[]; $method=strtoupper($_SERVER['REQUEST_METHOD']??'GET');
 if ($method==='POST') { $action=(string)($_POST['install_action']??'');
 if($action==='environment-next'){$step=2;$state['step']=2;}
@@ -86,6 +96,16 @@ $aboutId=(int)$pdo->lastInsertId();
 $pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,published_at) VALUES (NULL,?,?,?,?,?,NOW())')->execute([$uid,'Контакты','contacts','Контакты','published']); $contactsId=(int)$pdo->lastInsertId();
 $pdo->prepare('INSERT IGNORE INTO '.jura_table('post_categories').' (title,slug,description) VALUES (?,?,?)')->execute(['Новости','news','']);
 $pdo->prepare('INSERT IGNORE INTO '.jura_table('menus').' (code,name) VALUES (?,?)')->execute(['main','Main']); $menuId=(int)$pdo->query('SELECT id FROM '.jura_table('menus')." WHERE code='main'")->fetch()['id']; foreach([['Главная','/'],['О нас','/about'],['Контакты','/contacts']] as $i=>$mi){$pdo->prepare('INSERT INTO '.jura_table('menu_items').' (menu_id,title,url,sort_order,status) VALUES (?,?,?,?,?)')->execute([$menuId,$mi[0],$mi[1],$i+1,'active']);}
+
+$blogPageTitle='Блог';
+$pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,excerpt,status,template,published_at) VALUES (NULL,?,?,?,?,?,?,?,NOW())')->execute([$uid,$blogPageTitle,'blog','Новости, заметки и обновления Jura CMS.','Новости, заметки и обновления Jura CMS.','published','blog']);
+$blogPageId=(int)$pdo->lastInsertId();
+$pdo->prepare('INSERT IGNORE INTO '.jura_table('menu_items').' (menu_id,title,url,sort_order,status) VALUES (?,?,?,?,?)')->execute([$menuId,'Блог','/blog',3,'active']);
+$pdo->prepare('INSERT IGNORE INTO '.jura_table('menu_items').' (menu_id,title,url,sort_order,status) VALUES (?,?,?,?,?)')->execute([$menuId,'Контакты','/contacts',4,'active']);
+$catId=(int)$pdo->query('SELECT id FROM '.jura_table('post_categories')." WHERE slug='news' LIMIT 1")->fetch()['id'];
+$demoPosts=[['Welcome to Jura CMS','welcome-to-jura-cms','Jura CMS is ready for your first website.','Краткое описание возможностей Jura CMS.'],['Why Jura CMS is simple to install','simple-installation','Classic installation flow with a modern admin panel.','Описание идеи установки в корень сайта, config.php и install wizard.'],['Jura UI inside the admin panel','jura-ui-admin-panel','A clean UI foundation for the next generation CMS.','Описание Jura UI.'],['Built-in Simple JS Editor','built-in-simple-js-editor','A lightweight editor for pages, posts and content blocks.','Описание встроенного редактора.'],['Pages, posts and media in one place','pages-posts-media','Manage your content with a clear structure.','Описание страниц, записей, медиа.'],['Roadmap for Jura CMS','roadmap','The next steps: templates, plugins, products and updates.','Описание планов CMS.']];
+foreach($demoPosts as $dp){$pdo->prepare('INSERT INTO '.jura_table('posts').' (author_id,title,slug,excerpt,content,status,published_at) VALUES (?,?,?,?,?,?,NOW())')->execute([$uid,$dp[0],$dp[1],$dp[2],$dp[3],'published']);$postId=(int)$pdo->lastInsertId();$pdo->prepare('INSERT IGNORE INTO '.jura_table('post_category_relations').' (post_id,category_id) VALUES (?,?)')->execute([$postId,$catId]);$pdo->prepare('INSERT IGNORE INTO '.jura_table('routes').' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')->execute(['/blog/'.$dp[1],'post',$postId,'active']);}
+foreach(['/public/assets/frontend/img/juracms-logo.png'=>'Jura CMS Logo','/public/assets/frontend/img/juracms-banner.png'=>'Jura CMS Banner'] as $asset=>$title){$abs=BASE_PATH.$asset;if(is_file($abs)){$size=(int)filesize($abs);$mime=function_exists('mime_content_type')?mime_content_type($abs):'image/png';$name=basename($abs);$pdo->prepare('INSERT INTO '.jura_table('media_files').' (user_id,disk,path,filename,original_name,mime_type,size,title) VALUES (?,?,?,?,?,?,?,?)')->execute([$uid,'public',str_replace(BASE_PATH.'/','',$abs),$name,$name,(string)$mime,$size,$title]);}}
 foreach([['/','page',1],['/about','page',$aboutId],['/contacts','page',$contactsId],['/blog','post_category',1],['/catalog','product_category',1]] as $r){$pdo->prepare('INSERT IGNORE INTO '.jura_table('routes').' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')->execute([$r[0],$r[1],$r[2],'active']);}
 $settings=[['site_name',$a['site_name']],['cms_version',$version],['default_locale','ru'],['frontend_theme','default'],['admin_theme','jura'],['editor','simple'],['homepage_id','1']];
 $settingsColumns=[]; foreach($pdo->query('SHOW COLUMNS FROM '.jura_table('settings')) as $col){$settingsColumns[]=(string)$col['Field'];}

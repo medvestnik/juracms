@@ -1,1 +1,1 @@
-<section class="jura-card"><h1>Posts</h1><p>Empty state for MVP.</p></section>
+<section class="jura-card"><h1>Posts</h1><p>CRUD for posts in progress in this sprint.</p><?php if(!empty($posts)):?><table class="jura-table"><thead><tr><th>ID</th><th>Title</th><th>Category</th><th>Status</th><th>Published</th></tr></thead><tbody><?php foreach($posts as $p):?><tr><td><?=$p['id']?></td><td><?=$p['title']?></td><td><?=$p['category_title']?></td><td><?=$p['status']?></td><td><?=$p['published_at']?></td></tr><?php endforeach;?></tbody></table><?php endif;?></section>
