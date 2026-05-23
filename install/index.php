@@ -1,144 +1,51 @@
 <?php
-
 declare(strict_types=1);
-
-if (!defined('BASE_PATH')) {
-    define('BASE_PATH', dirname(__DIR__));
+if (!defined('BASE_PATH')) define('BASE_PATH', dirname(__DIR__)); require_once BASE_PATH.'/core/start.php';
+$configFile=BASE_PATH.'/config.php'; $lockFile=BASE_PATH.'/storage/installed.lock'; $version=trim((string)@file_get_contents(BASE_PATH.'/VERSION'))?:'0.1.0';
+$_SESSION['installer']=$_SESSION['installer']??['step'=>1,'db'=>['host'=>'127.0.0.1','port'=>'3306','database'=>'','username'=>'','password'=>'','prefix'=>'jura_'],'admin'=>['site_name'=>'Jura CMS','admin_name'=>'','admin_email'=>'']];
+$state=&$_SESSION['installer']; $step=(int)$state['step']; $errors=[]; $method=strtoupper($_SERVER['REQUEST_METHOD']??'GET');
+if ($method==='POST') { $action=(string)($_POST['install_action']??'');
+if($action==='environment-next'){$step=2;$state['step']=2;}
+if($action==='db-next'){foreach(['host','port','database','username','password','prefix'] as $f){$state['db'][$f]=trim((string)($_POST['db_'.$f]??$state['db'][$f]));} try{db_connect($state['db']);$step=3;$state['step']=3;}catch(Throwable $e){$errors[]=$e->getMessage();$step=2;}}
+if($action==='admin-next'){foreach(['site_name','admin_name','admin_email'] as $f){$state['admin'][$f]=trim((string)($_POST[$f]??$state['admin'][$f]));}$p=(string)($_POST['admin_password']??'');$c=(string)($_POST['admin_password_confirmation']??''); if(!filter_var($state['admin']['admin_email'],FILTER_VALIDATE_EMAIL)||$p!==$c||strlen($p)<8){$errors[]='Проверьте email и пароль (минимум 8 символов).';$step=3;} else{$state['admin_password_hash']=password_hash($p,PASSWORD_DEFAULT);$step=4;$state['step']=4;}}
+if($action==='install-run'){ $db=$state['db']; $a=$state['admin']; $pdo=db_connect($db); $p=preg_replace('/[^a-zA-Z0-9_]/','',(string)$db['prefix'])?:'jura_';
+$tables=[
+"{$p}user_groups"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(120) UNIQUE,name VARCHAR(191),description TEXT NULL,is_system TINYINT(1) DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}users"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,group_id INT UNSIGNED,name VARCHAR(191),email VARCHAR(191) UNIQUE,password_hash VARCHAR(255),status VARCHAR(40) DEFAULT 'active',email_verified_at TIMESTAMP NULL,last_login_at TIMESTAMP NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}permissions"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(120) UNIQUE,name VARCHAR(191),description TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}group_permissions"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,group_id INT UNSIGNED,permission_id INT UNSIGNED,UNIQUE KEY uq_gp (group_id,permission_id)",
+"{$p}settings"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,setting_key VARCHAR(191) UNIQUE,setting_value TEXT NULL,setting_type VARCHAR(40) DEFAULT 'string',group_name VARCHAR(80) DEFAULT 'system',updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}pages"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,parent_id INT UNSIGNED NULL,author_id INT UNSIGNED,title VARCHAR(191),slug VARCHAR(191),content MEDIUMTEXT NULL,excerpt TEXT NULL,status VARCHAR(20),template VARCHAR(80) NULL,meta_title VARCHAR(191) NULL,meta_description TEXT NULL,meta_keywords TEXT NULL,sort_order INT DEFAULT 0,published_at TIMESTAMP NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}posts"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,author_id INT UNSIGNED,title VARCHAR(191),slug VARCHAR(191),content MEDIUMTEXT NULL,excerpt TEXT NULL,featured_image_id INT UNSIGNED NULL,status VARCHAR(20),meta_title VARCHAR(191) NULL,meta_description TEXT NULL,published_at TIMESTAMP NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}post_categories"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,parent_id INT UNSIGNED NULL,title VARCHAR(191),slug VARCHAR(191),description TEXT NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}post_category_relations"=>"post_id INT UNSIGNED,category_id INT UNSIGNED,PRIMARY KEY(post_id,category_id)","{$p}tags"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),slug VARCHAR(191),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}tag_relations"=>"tag_id INT UNSIGNED,entity_type VARCHAR(40),entity_id INT UNSIGNED,PRIMARY KEY(tag_id,entity_type,entity_id)","{$p}menus"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(120) UNIQUE,name VARCHAR(191),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}menu_items"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,menu_id INT UNSIGNED,parent_id INT UNSIGNED NULL,title VARCHAR(191),url VARCHAR(191),entity_type VARCHAR(40) NULL,entity_id INT UNSIGNED NULL,target VARCHAR(20) DEFAULT '_self',sort_order INT DEFAULT 0,status VARCHAR(20) DEFAULT 'active',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}blocks"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(120) UNIQUE,title VARCHAR(191),type VARCHAR(60),content MEDIUMTEXT NULL,settings_json JSON NULL,status VARCHAR(20) DEFAULT 'active',sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}media_files"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id INT UNSIGNED,disk VARCHAR(40),path VARCHAR(255),filename VARCHAR(191),original_name VARCHAR(191),mime_type VARCHAR(120),size BIGINT,width INT NULL,height INT NULL,alt VARCHAR(191) NULL,title VARCHAR(191) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}product_categories"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,parent_id INT UNSIGNED NULL,title VARCHAR(191),slug VARCHAR(191),description TEXT NULL,sort_order INT DEFAULT 0,status VARCHAR(20) DEFAULT 'active',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}products"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,category_id INT UNSIGNED NULL,title VARCHAR(191),slug VARCHAR(191),sku VARCHAR(80),description MEDIUMTEXT NULL,short_description TEXT NULL,price DECIMAL(12,2) DEFAULT 0,old_price DECIMAL(12,2) DEFAULT 0,currency VARCHAR(10) DEFAULT 'USD',quantity INT DEFAULT 0,status VARCHAR(20) DEFAULT 'draft',featured_image_id INT UNSIGNED NULL,meta_title VARCHAR(191) NULL,meta_description TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}product_images"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,product_id INT UNSIGNED,media_file_id INT UNSIGNED,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP","{$p}product_attributes"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),code VARCHAR(120),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+"{$p}product_attribute_values"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,product_id INT UNSIGNED,attribute_id INT UNSIGNED,value TEXT", "{$p}routes"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,path VARCHAR(191) UNIQUE,entity_type VARCHAR(40),entity_id INT UNSIGNED,status VARCHAR(20) DEFAULT 'active',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", "{$p}redirects"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,source_path VARCHAR(191),target_path VARCHAR(191),status_code SMALLINT DEFAULT 301,is_active TINYINT(1) DEFAULT 1,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", "{$p}migrations"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,migration VARCHAR(191),batch INT DEFAULT 1,executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "{$p}activity_logs"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id INT UNSIGNED NULL,action VARCHAR(120),entity_type VARCHAR(40),entity_id INT UNSIGNED NULL,message TEXT NULL,ip_address VARCHAR(45) NULL,user_agent VARCHAR(255) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+]; foreach($tables as $n=>$d){$pdo->exec("CREATE TABLE IF NOT EXISTS `{$n}` ({$d}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");}
+$groups=['users','authors','editors','moderators','administrators','super_administrators']; foreach($groups as $g){$pdo->prepare('INSERT IGNORE INTO '.jura_table('user_groups').' (code,name,description,is_system) VALUES (?,?,?,1)')->execute([$g,ucwords(str_replace('_',' ',$g)),$g]);}
+$perms=['dashboard.view','users.view','users.create','users.edit','users.delete','groups.view','groups.edit','pages.view','pages.create','pages.edit','pages.delete','posts.view','posts.create','posts.edit','posts.delete','products.view','products.create','products.edit','products.delete','media.view','media.upload','settings.view','settings.edit','system.update'];
+foreach($perms as $c){$pdo->prepare('INSERT IGNORE INTO '.jura_table('permissions').' (code,name,description) VALUES (?,?,?)')->execute([$c,$c,$c]);}
+$super=(int)$pdo->query('SELECT id FROM '.jura_table('user_groups')." WHERE code='super_administrators' LIMIT 1")->fetch()['id']; $adminGroup=(int)$pdo->query('SELECT id FROM '.jura_table('user_groups')." WHERE code='administrators' LIMIT 1")->fetch()['id'];
+$pdo->prepare('INSERT INTO '.jura_table('users').' (group_id,name,email,password_hash,status) VALUES (?,?,?,?,?)')->execute([$super,$a['admin_name'],$a['admin_email'],$state['admin_password_hash'],'active']);
+$uid=(int)$pdo->lastInsertId();
+$allPermIds=$pdo->query('SELECT id FROM '.jura_table('permissions'))->fetchAll(PDO::FETCH_COLUMN); foreach($allPermIds as $pid){$pdo->prepare('INSERT IGNORE INTO '.jura_table('group_permissions').' (group_id,permission_id) VALUES (?,?)')->execute([$super,$pid]); if((int)$pid!== (int)$pdo->query('SELECT id FROM '.jura_table('permissions')." WHERE code='system.update'")->fetch()['id']){$pdo->prepare('INSERT IGNORE INTO '.jura_table('group_permissions').' (group_id,permission_id) VALUES (?,?)')->execute([$adminGroup,$pid]);}}
+$pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,published_at) VALUES (NULL,?,?,?,?,?,NOW())')->execute([$uid,'Главная','home','Добро пожаловать','published']);
+$pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,published_at) VALUES (NULL,?,?,?,?,?,NOW())')->execute([$uid,'О нас','about','О нас','published']);
+$aboutId=(int)$pdo->lastInsertId();
+$pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,published_at) VALUES (NULL,?,?,?,?,?,NOW())')->execute([$uid,'Контакты','contacts','Контакты','published']); $contactsId=(int)$pdo->lastInsertId();
+$pdo->prepare('INSERT IGNORE INTO '.jura_table('post_categories').' (title,slug,description) VALUES (?,?,?)')->execute(['Новости','news','']);
+$pdo->prepare('INSERT IGNORE INTO '.jura_table('menus').' (code,name) VALUES (?,?)')->execute(['main','Main']); $menuId=(int)$pdo->query('SELECT id FROM '.jura_table('menus')." WHERE code='main'")->fetch()['id']; foreach([['Главная','/'],['О нас','/about'],['Контакты','/contacts']] as $i=>$mi){$pdo->prepare('INSERT INTO '.jura_table('menu_items').' (menu_id,title,url,sort_order,status) VALUES (?,?,?,?,?)')->execute([$menuId,$mi[0],$mi[1],$i+1,'active']);}
+foreach([['/','page',1],['/about','page',$aboutId],['/contacts','page',$contactsId],['/blog','post_category',1],['/catalog','product_category',1]] as $r){$pdo->prepare('INSERT IGNORE INTO '.jura_table('routes').' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')->execute([$r[0],$r[1],$r[2],'active']);}
+$settings=[['site_name',$a['site_name']],['cms_version',$version],['default_locale','ru'],['frontend_theme','default'],['admin_theme','jura'],['editor','simple'],['homepage_id','1']]; foreach($settings as $s){$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1],'string','system']);}
+file_put_contents($configFile,"<?php\n\nreturn ".var_export(['app'=>['name'=>$a['site_name'],'installed'=>true,'version'=>$version],'database'=>['connection'=>'mysql','host'=>$db['host'],'port'=>(int)$db['port'],'database'=>$db['database'],'username'=>$db['username'],'password'=>$db['password'],'prefix'=>$p,'charset'=>'utf8mb4']],true).";\n");
+file_put_contents($lockFile,json_encode(['installed_at'=>date(DATE_ATOM),'site_name'=>$a['site_name']],JSON_PRETTY_PRINT)); $_SESSION['installer']=[]; redirect('/admin/login');
 }
-
-if (!defined('INSTALL_PATH')) {
-    define('INSTALL_PATH', __DIR__);
 }
-
-$autoload = BASE_PATH . '/vendor/autoload.php';
-if (file_exists($autoload)) {
-    require_once $autoload;
-}
-
-$coreStart = BASE_PATH . '/core/start.php';
-if (file_exists($coreStart)) {
-    require_once $coreStart;
-}
-
-$configFile = BASE_PATH . '/config.php';
-$lockFile = BASE_PATH . '/storage/installed.lock';
-$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-$version = trim((string) @file_get_contents(BASE_PATH . '/VERSION')) ?: '0.1.0-alpha';
-
-if (!isset($_SESSION['installer'])) {
-    $_SESSION['installer'] = [];
-}
-
-$errors = [];
-$success = null;
-$step = max(1, (int) ($_SESSION['installer']['step'] ?? 1));
-$db = (array) ($_SESSION['installer']['db'] ?? ['host'=>'127.0.0.1','port'=>'3306','database'=>'','username'=>'','password'=>'','prefix'=>'jura_']);
-$admin = (array) ($_SESSION['installer']['admin'] ?? ['site_name'=>'','admin_name'=>'','admin_email'=>'']);
-
-$installedConfig = is_file($configFile) ? ((array) require $configFile) : [];
-$fullyInstalled = is_file($configFile) && is_file($lockFile) && (($installedConfig['app']['installed'] ?? false) === true);
-
-if ($fullyInstalled && $method === 'POST' && (($_POST['install_action'] ?? '') === 'reset_installation')) {
-    $tokenInput = (string) ($_POST['install_reset_token'] ?? '');
-    $confirm = ($_POST['confirm_reset'] ?? '') === '1';
-    $expectedToken = (string) ($installedConfig['security']['install_reset_token'] ?? '');
-
-    if (!$confirm) {
-        $errors[] = 'Подтвердите сброс установки.';
-    } elseif ($expectedToken === '' || !hash_equals($expectedToken, $tokenInput)) {
-        $errors[] = 'Неверный reset token.';
-    } else {
-        if (is_file($lockFile)) {
-            @unlink($lockFile);
-        }
-        $_SESSION['installer'] = [];
-        redirect('/install/');
-    }
-}
-
-if (!$fullyInstalled && $method === 'POST') {
-    $action = (string) ($_POST['install_action'] ?? '');
-    $requiredExt = ['pdo', 'pdo_mysql', 'mbstring', 'json'];
-    $checks = ['PHP >= 8.1' => version_compare(PHP_VERSION, '8.1.0', '>='), 'vendor/autoload.php' => is_file($autoload)];
-    foreach ($requiredExt as $ext) { $checks['extension: '.$ext] = extension_loaded($ext); }
-    foreach (['root'=>BASE_PATH,'storage'=>BASE_PATH.'/storage','uploads'=>BASE_PATH.'/uploads','cache'=>BASE_PATH.'/cache','logs'=>BASE_PATH.'/logs'] as $k=>$dir) {
-        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
-        $checks['writable: '.$k] = is_writable($dir);
-    }
-    $environmentOk = !in_array(false, $checks, true);
-
-    if ($action === 'environment-next') {
-        if (!$environmentOk) { $errors[] = 'Сервер не прошёл проверки окружения.'; $step = 1; }
-        else { $_SESSION['installer']['step']=2; $step=2; }
-    }
-
-    if ($action === 'db-test') {
-        $db = ['host'=>trim((string)($_POST['db_host']??'')),'port'=>trim((string)($_POST['db_port']??'3306')),'database'=>trim((string)($_POST['db_database']??'')),'username'=>trim((string)($_POST['db_username']??'')),'password'=>(string)($_POST['db_password']??''),'prefix'=>trim((string)($_POST['db_prefix']??'jura_')),'connection'=>'mysql','charset'=>'utf8mb4'];
-        if ($db['host']===''||$db['database']===''||$db['username']==='') $errors[]='Заполните host, database, username.';
-        if (!$errors) {
-            try { db_connect($db); $_SESSION['installer']['db']=$db; $_SESSION['installer']['step']=3; $step=3; }
-            catch (Throwable $e) { $errors[]='Ошибка подключения к базе данных: '.$e->getMessage(); $step=2; }
-        } else { $step=2; }
-    }
-
-    if ($action === 'admin-next') {
-        $admin = ['site_name'=>trim((string)($_POST['site_name']??'')),'admin_name'=>trim((string)($_POST['admin_name']??'')),'admin_email'=>trim((string)($_POST['admin_email']??''))];
-        $password=(string)($_POST['admin_password']??''); $confirm=(string)($_POST['admin_password_confirmation']??'');
-        if ($admin['site_name']==='') $errors[]='Поле site_name обязательно.';
-        if ($admin['admin_name']==='') $errors[]='Поле admin_name обязательно.';
-        if (!filter_var($admin['admin_email'], FILTER_VALIDATE_EMAIL)) $errors[]='Укажите корректный admin_email.';
-        if (mb_strlen($password)<8) $errors[]='Пароль минимум 8 символов.';
-        if ($password!==$confirm) $errors[]='Пароли не совпадают.';
-        if (!$errors) { $_SESSION['installer']['admin']=$admin; $_SESSION['installer']['admin_password_hash']=password_hash($password,PASSWORD_DEFAULT); $_SESSION['installer']['step']=4; $step=4; }
-        else { $step=3; }
-    }
-
-    if ($action === 'install-run') {
-        $db=(array)($_SESSION['installer']['db']??[]); $admin=(array)($_SESSION['installer']['admin']??[]); $hash=(string)($_SESSION['installer']['admin_password_hash']??'');
-        if (!$db || !$admin || $hash==='') { $errors[]='Сессия установки неполная.'; $step=2; }
-        else {
-            try {
-                $pdo=db_connect($db); $prefix=preg_replace('/[^a-zA-Z0-9_]/','',(string)($db['prefix']??'jura_'))?:'jura_';
-                $resetToken=bin2hex(random_bytes(32));
-                $config=['app'=>['name'=>$admin['site_name'],'url'=>((isset($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https://':'http://').($_SERVER['HTTP_HOST']??'localhost'),'env'=>'production','debug'=>false,'key'=>bin2hex(random_bytes(16)),'installed'=>true,'version'=>$version],'database'=>['connection'=>'mysql','host'=>$db['host'],'port'=>(int)$db['port'],'database'=>$db['database'],'username'=>$db['username'],'password'=>$db['password'],'prefix'=>$prefix,'charset'=>'utf8mb4'],'security'=>['install_reset_token'=>$resetToken,'full_reset_allowed'=>false]];
-                $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($config, true) . ";\n";
-                if (file_put_contents($configFile, $export) === false) throw new RuntimeException('Не удалось создать config.php');
-
-                $adminsTable=sprintf('`%sadmins`',$prefix); $settingsTable=sprintf('`%ssettings`',$prefix);
-                $pdo->exec("CREATE TABLE IF NOT EXISTS {$adminsTable} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191) NOT NULL,email VARCHAR(191) NOT NULL UNIQUE,password_hash VARCHAR(255) NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-                $pdo->exec("CREATE TABLE IF NOT EXISTS {$settingsTable} (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,setting_key VARCHAR(191) NOT NULL UNIQUE,setting_value TEXT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-                $ins=$pdo->prepare("INSERT INTO {$adminsTable} (name,email,password_hash) VALUES (:name,:email,:password_hash)");
-                $ins->execute(['name'=>$admin['admin_name'],'email'=>$admin['admin_email'],'password_hash'=>$hash]);
-                $set=$pdo->prepare("INSERT INTO {$settingsTable} (setting_key, setting_value) VALUES (:k,:v) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)");
-                $set->execute(['k'=>'site_name','v'=>$admin['site_name']]);
-                $set->execute(['k'=>'cms_version','v'=>$version]);
-
-                $lock=['installed_at'=>(new DateTimeImmutable())->format(DATE_ATOM),'version'=>$version,'mode'=>'web-installer','site_name'=>$admin['site_name'],'admin_email'=>$admin['admin_email']];
-                if (file_put_contents($lockFile, json_encode($lock, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES).PHP_EOL)===false) throw new RuntimeException('Не удалось создать installed.lock');
-                $_SESSION['installer']=[];
-                redirect('/admin/login');
-            } catch (Throwable $e) { $errors[]='Установка не завершена: '.$e->getMessage(); if (is_file($lockFile)) @unlink($lockFile); $step=4; }
-        }
-    }
-}
-
-$lockData = is_file($lockFile) ? (json_decode((string) file_get_contents($lockFile), true) ?: []) : [];
-header('Content-Type: text/html; charset=utf-8');
-?>
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Jura CMS Installer</title><link rel="stylesheet" href="/public/assets/cms/installer.css"></head><body><div class="installer-shell"><h1>Установка Jura CMS</h1>
-<?php foreach ($errors as $error): ?><p style="color:#b00020;"><?= e($error) ?></p><?php endforeach; ?>
-<?php if ($fullyInstalled): ?>
-<p>Jura CMS уже установлена</p>
-<ul><li>site_name: <?= e((string)($lockData['site_name'] ?? $installedConfig['app']['name'] ?? '')) ?></li><li>app.url: <?= e((string)($installedConfig['app']['url'] ?? '')) ?></li><li>version: <?= e((string)($lockData['version'] ?? $installedConfig['app']['version'] ?? '')) ?></li><li>installed_at: <?= e((string)($lockData['installed_at'] ?? '')) ?></li><li>admin_email: <?= e((string)($lockData['admin_email'] ?? '')) ?></li></ul>
-<p><a href="/">Открыть сайт</a> | <a href="/admin/login">Войти в админку</a></p>
-<form method="post"><input type="hidden" name="install_action" value="reset_installation"><input name="install_reset_token" placeholder="install_reset_token"><label><input type="checkbox" name="confirm_reset" value="1"> Я понимаю, что установка будет сброшена</label><button type="submit">Reset installation</button></form>
-<?php else: ?>
-<p>Шаг <?= $step ?> из 4</p>
-<form method="post">
-<?php if ($step===1): ?><input type="hidden" name="install_action" value="environment-next"><button>Продолжить</button><?php endif; ?>
-<?php if ($step===2): ?><input type="hidden" name="install_action" value="db-test"><input name="db_host" value="<?=e($db['host'])?>" placeholder="DB host"><input name="db_port" value="<?=e($db['port'])?>" placeholder="DB port"><input name="db_database" value="<?=e($db['database'])?>" placeholder="DB name"><input name="db_username" value="<?=e($db['username'])?>" placeholder="DB username"><input name="db_password" type="password" placeholder="DB password"><input name="db_prefix" value="<?=e($db['prefix'])?>" placeholder="DB prefix"><button>Проверить БД</button><?php endif; ?>
-<?php if ($step===3): ?><input type="hidden" name="install_action" value="admin-next"><input name="site_name" value="<?=e($admin['site_name'])?>" placeholder="site_name"><input name="admin_name" value="<?=e($admin['admin_name'])?>" placeholder="admin_name"><input name="admin_email" value="<?=e($admin['admin_email'])?>" placeholder="admin_email"><input type="password" name="admin_password" placeholder="admin_password"><input type="password" name="admin_password_confirmation" placeholder="admin_password_confirmation"><button>Продолжить</button><?php endif; ?>
-<?php if ($step===4): ?><input type="hidden" name="install_action" value="install-run"><button>Выполнить установку</button><?php endif; ?>
-</form>
-<?php endif; ?>
-</div></body></html>
+$checks=['PHP >= 8.1'=>version_compare(PHP_VERSION,'8.1.0','>='),'pdo_mysql'=>extension_loaded('pdo_mysql'),'mbstring'=>extension_loaded('mbstring'),'json'=>extension_loaded('json')];
+include __DIR__.'/views/wizard.php';
