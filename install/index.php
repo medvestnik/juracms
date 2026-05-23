@@ -87,7 +87,15 @@ $pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,sl
 $pdo->prepare('INSERT IGNORE INTO '.jura_table('post_categories').' (title,slug,description) VALUES (?,?,?)')->execute(['Новости','news','']);
 $pdo->prepare('INSERT IGNORE INTO '.jura_table('menus').' (code,name) VALUES (?,?)')->execute(['main','Main']); $menuId=(int)$pdo->query('SELECT id FROM '.jura_table('menus')." WHERE code='main'")->fetch()['id']; foreach([['Главная','/'],['О нас','/about'],['Контакты','/contacts']] as $i=>$mi){$pdo->prepare('INSERT INTO '.jura_table('menu_items').' (menu_id,title,url,sort_order,status) VALUES (?,?,?,?,?)')->execute([$menuId,$mi[0],$mi[1],$i+1,'active']);}
 foreach([['/','page',1],['/about','page',$aboutId],['/contacts','page',$contactsId],['/blog','post_category',1],['/catalog','product_category',1]] as $r){$pdo->prepare('INSERT IGNORE INTO '.jura_table('routes').' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')->execute([$r[0],$r[1],$r[2],'active']);}
-$settings=[['site_name',$a['site_name']],['cms_version',$version],['default_locale','ru'],['frontend_theme','default'],['admin_theme','jura'],['editor','simple'],['homepage_id','1']]; foreach($settings as $s){$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1],'string','system']);}
+$settings=[['site_name',$a['site_name']],['cms_version',$version],['default_locale','ru'],['frontend_theme','default'],['admin_theme','jura'],['editor','simple'],['homepage_id','1']];
+$settingsColumns=[]; foreach($pdo->query('SHOW COLUMNS FROM '.jura_table('settings')) as $col){$settingsColumns[]=(string)$col['Field'];}
+$hasSettingType=in_array('setting_type',$settingsColumns,true); $hasGroupName=in_array('group_name',$settingsColumns,true);
+foreach($settings as $s){
+if($hasSettingType&&$hasGroupName){$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1],'string','system']);}
+elseif($hasSettingType){$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value,setting_type) VALUES (?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1],'string']);}
+elseif($hasGroupName){$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value,group_name) VALUES (?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1],'system']);}
+else{$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1]]);}
+}
 file_put_contents($configFile,"<?php\n\nreturn ".var_export(['app'=>['name'=>$a['site_name'],'installed'=>true,'version'=>$version],'database'=>['connection'=>'mysql','host'=>$db['host'],'port'=>(int)$db['port'],'database'=>$db['database'],'username'=>$db['username'],'password'=>$db['password'],'prefix'=>$p,'charset'=>'utf8mb4']],true).";\n");
 file_put_contents($lockFile,json_encode(['installed_at'=>date(DATE_ATOM),'site_name'=>$a['site_name']],JSON_PRETTY_PRINT)); $_SESSION['installer']=[]; redirect('/admin/login');
 }
