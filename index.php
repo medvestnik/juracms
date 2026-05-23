@@ -11,8 +11,6 @@ require_once __DIR__ . '/core/start.php';
 
 use Core\Installer\Runtime as InstallerRuntime;
 
-function jura_prefix(): string { $db=(array) cms_config('database', []); return preg_replace('/[^a-zA-Z0-9_]/','',(string)($db['prefix']??'jura_'))?:'jura_'; }
-function jura_table(string $name): string { return sprintf('`%s%s`', str_replace('`','', jura_prefix()), $name); }
 function admin_db(): PDO { return db_connect((array) cms_config('database', [])); }
 function frontend_route(string $path): ?array {
     try { $pdo=admin_db(); $t=jura_table('routes'); $s=$pdo->prepare("SELECT * FROM {$t} WHERE path=:p AND status='active' LIMIT 1"); $s->execute(['p'=>$path]); return $s->fetch()?:null; } catch (Throwable) { return null; }

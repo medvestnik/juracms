@@ -1,7 +1,52 @@
 <?php
 declare(strict_types=1);
-if (!defined('BASE_PATH')) define('BASE_PATH', dirname(__DIR__)); require_once BASE_PATH.'/core/start.php';
+if (!defined('BASE_PATH')) {
+    define('BASE_PATH', dirname(__DIR__));
+}
+if (!defined('INSTALL_PATH')) {
+    define('INSTALL_PATH', __DIR__);
+}
+$autoload = BASE_PATH . '/vendor/autoload.php';
+if (is_file($autoload)) {
+    require_once $autoload;
+}
+$helpers = BASE_PATH . '/core/Support/helpers.php';
+if (is_file($helpers)) {
+    require_once $helpers;
+}
+require_once BASE_PATH.'/core/start.php';
 $configFile=BASE_PATH.'/config.php'; $lockFile=BASE_PATH.'/storage/installed.lock'; $version=trim((string)@file_get_contents(BASE_PATH.'/VERSION'))?:'0.1.0';
+$config = is_file($configFile) ? require $configFile : [];
+$installed = is_file($configFile) && is_file($lockFile);
+if ($installed) {
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($method === 'POST' && (string)($_POST['install_action'] ?? '') === 'reset-installation') {
+        $allowReset = (bool)($config['app']['allow_install_reset'] ?? false);
+        $token = (string)($_POST['_token'] ?? '');
+        if ($allowReset && hash_equals(csrf_token(), $token)) {
+            @unlink($lockFile);
+            $_SESSION['installer'] = [];
+            redirect('/install/');
+        }
+    }
+    $siteName = (string)($config['app']['name'] ?? 'Jura CMS');
+    $adminEmail = null;
+    $usersWarning = null;
+    try {
+        $pdo = db_connect((array)($config['database'] ?? []));
+        $usersTable = jura_table('users');
+        $stmt = $pdo->query("SHOW TABLES LIKE " . $pdo->quote(str_replace('`', '', $usersTable)));
+        if ($stmt && $stmt->fetchColumn()) {
+            $adminEmail = $pdo->query('SELECT email FROM ' . $usersTable . ' ORDER BY id ASC LIMIT 1')->fetchColumn() ?: null;
+        } else {
+            $usersWarning = 'Таблица пользователей не найдена';
+        }
+    } catch (Throwable $e) {
+        $usersWarning = 'База данных недоступна: ' . $e->getMessage();
+    }
+    include __DIR__ . '/views/installed.php';
+    exit;
+}
 $_SESSION['installer']=$_SESSION['installer']??['step'=>1,'db'=>['host'=>'127.0.0.1','port'=>'3306','database'=>'','username'=>'','password'=>'','prefix'=>'jura_'],'admin'=>['site_name'=>'Jura CMS','admin_name'=>'','admin_email'=>'']];
 $state=&$_SESSION['installer']; $step=(int)$state['step']; $errors=[]; $method=strtoupper($_SERVER['REQUEST_METHOD']??'GET');
 if ($method==='POST') { $action=(string)($_POST['install_action']??'');
@@ -32,7 +77,7 @@ $groups=['users','authors','editors','moderators','administrators','super_admini
 $perms=['dashboard.view','users.view','users.create','users.edit','users.delete','groups.view','groups.edit','pages.view','pages.create','pages.edit','pages.delete','posts.view','posts.create','posts.edit','posts.delete','products.view','products.create','products.edit','products.delete','media.view','media.upload','settings.view','settings.edit','system.update'];
 foreach($perms as $c){$pdo->prepare('INSERT IGNORE INTO '.jura_table('permissions').' (code,name,description) VALUES (?,?,?)')->execute([$c,$c,$c]);}
 $super=(int)$pdo->query('SELECT id FROM '.jura_table('user_groups')." WHERE code='super_administrators' LIMIT 1")->fetch()['id']; $adminGroup=(int)$pdo->query('SELECT id FROM '.jura_table('user_groups')." WHERE code='administrators' LIMIT 1")->fetch()['id'];
-$pdo->prepare('INSERT INTO '.jura_table('users').' (group_id,name,email,password_hash,status) VALUES (?,?,?,?,?)')->execute([$super,$a['admin_name'],$a['admin_email'],$state['admin_password_hash'],'active']);
+$pdo->prepare('INSERT INTO '.jura_table('users').' (group_id,name,email,password_hash,status) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id),group_id=VALUES(group_id),name=VALUES(name),password_hash=VALUES(password_hash),status=VALUES(status)')->execute([$super,$a['admin_name'],$a['admin_email'],$state['admin_password_hash'],'active']);
 $uid=(int)$pdo->lastInsertId();
 $allPermIds=$pdo->query('SELECT id FROM '.jura_table('permissions'))->fetchAll(PDO::FETCH_COLUMN); foreach($allPermIds as $pid){$pdo->prepare('INSERT IGNORE INTO '.jura_table('group_permissions').' (group_id,permission_id) VALUES (?,?)')->execute([$super,$pid]); if((int)$pid!== (int)$pdo->query('SELECT id FROM '.jura_table('permissions')." WHERE code='system.update'")->fetch()['id']){$pdo->prepare('INSERT IGNORE INTO '.jura_table('group_permissions').' (group_id,permission_id) VALUES (?,?)')->execute([$adminGroup,$pid]);}}
 $pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,published_at) VALUES (NULL,?,?,?,?,?,NOW())')->execute([$uid,'Главная','home','Добро пожаловать','published']);
