@@ -1,1 +1,1 @@
-<section class="card"><h1>404</h1><p>Страница не найдена.</p><a class="btn btn-primary" href="/">На главную</a></section>
+<section class="card"><h1>404</h1><p>Page not found.</p><a class="btn btn-primary" href="/">Go home</a><?php if(!empty($_SESSION['admin_user_id'])):?><a class="btn btn-soft" href="/admin">Admin</a><?php endif;?></section>
