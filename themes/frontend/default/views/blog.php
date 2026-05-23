@@ -1,0 +1,1 @@
+<section class="card"><h1>Blog</h1><div class="grid"><?php foreach(($posts??[]) as $post):?><article class="tile"><h3><?=e($post['title'])?></h3><p><?=e($post['excerpt']??'')?></p><small><?=e($post['published_at']??'')?></small><p><a class="btn btn-soft" href="/blog/<?=e($post['slug'])?>">Read more</a></p></article><?php endforeach;?></div></section>
