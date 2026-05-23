@@ -47,7 +47,17 @@ if ($installed) {
     include __DIR__ . '/views/installed.php';
     exit;
 }
-$_SESSION['installer']=$_SESSION['installer']??['step'=>1,'db'=>['host'=>'127.0.0.1','port'=>'3306','database'=>'','username'=>'','password'=>'','prefix'=>'jura_'],'admin'=>['site_name'=>'Jura CMS','admin_name'=>'','admin_email'=>'']];
+$installerDefaults = [
+    'step' => 1,
+    'db' => ['host' => '127.0.0.1', 'port' => '3306', 'database' => '', 'username' => '', 'password' => '', 'prefix' => 'jura_'],
+    'admin' => ['site_name' => 'Jura CMS', 'admin_name' => '', 'admin_email' => ''],
+];
+$installerState = $_SESSION['installer'] ?? [];
+if (!is_array($installerState)) { $installerState = []; }
+$installerState = array_replace_recursive($installerDefaults, $installerState);
+if (!isset($installerState['step']) || !is_numeric($installerState['step'])) { $installerState['step'] = 1; }
+$installerState['step'] = max(1, min(4, (int) $installerState['step']));
+$_SESSION['installer'] = $installerState;
 $state=&$_SESSION['installer']; $step=(int)$state['step']; $errors=[]; $method=strtoupper($_SERVER['REQUEST_METHOD']??'GET');
 if ($method==='POST') { $action=(string)($_POST['install_action']??'');
 if($action==='environment-next'){$step=2;$state['step']=2;}
