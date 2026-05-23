@@ -25,6 +25,7 @@ if (!class_exists(App\Core\View::class)) {
 }
 
 require_once BASE_PATH . '/app/helpers.php';
+require_once BASE_PATH . '/core/Support/helpers.php';
 require_once BASE_PATH . '/core/Installer/Runtime.php';
 require_once BASE_PATH . '/core/Updater/Updater.php';
 
