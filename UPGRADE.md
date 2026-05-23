@@ -1,9 +1,10 @@
-# UPGRADE
+# Upgrade
 
-При обновлении Jura CMS не перезаписывайте:
-
+При обновлении **нельзя затирать**:
 - `config.php`
 - `uploads/`
 - `storage/`
 - `cache/`
 - `logs/`
+
+Используйте таблицу `jura_migrations` для пошаговых миграций.

@@ -1,5 +1,1 @@
-<section class="jura-card">
-    <h1>Welcome to Jura CMS MVP</h1>
-    <p>Jura CMS keeps a classic installation flow with <code>index.php</code> in the project root.</p>
-    <p>Use the links above to open admin MVP pages and installer placeholder.</p>
-</section>
+<section class="card hero"><strong>Jura CMS</strong><h1>Jura CMS is installed and ready</h1><p>A modern CMS with the ease of classic engines and the convenience of a new-generation admin panel.</p><img src="/public/assets/frontend/img/juracms-banner.png" alt="Jura CMS banner" style="width:100%;border-radius:12px;max-height:320px;object-fit:cover"><div><a class="btn btn-primary" href="/admin">Go to Admin Panel</a> <a class="btn btn-soft" href="#">View Documentation</a></div><div class="grid"><div class="tile">Pages</div><div class="tile">Posts</div><div class="tile">Products</div><div class="tile">Media</div></div><p><a href="https://juracms.com" target="_blank" rel="noopener">juracms.com</a></p></section>

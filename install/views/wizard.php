@@ -1,15 +1,1 @@
-<!doctype html>
-<html lang="ru">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Установка Jura CMS</title>
-    <link rel="stylesheet" href="/public/assets/cms/installer.css">
-</head>
-<body>
-<div class="installer-shell">
-    <h1>Установка Jura CMS</h1>
-    <p>Используйте мастер установки по адресу <code>/install/</code>. MVP-кнопка завершения установки удалена.</p>
-</div>
-</body>
-</html>
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jura CMS Installer</title><link rel="stylesheet" href="/install/assets/installer.css"></head><body><div class="wrap"><div class="card"><h1>Jura CMS</h1><p>Шаг <?= (int)$step ?> из 4</p><ol class="steps"><li class="<?= $step>=1?'on':''?>">Окружение</li><li class="<?= $step>=2?'on':''?>">База данных</li><li class="<?= $step>=3?'on':''?>">Пользователь</li><li class="<?= $step>=4?'on':''?>">Завершение</li></ol><?php foreach($errors as $e):?><div class="err"><?=e($e)?></div><?php endforeach;?><form method="post"><?php if($step===1):?><ul><?php foreach($checks as $k=>$ok):?><li><?=e($k)?>: <b class="<?= $ok?'ok':'bad' ?>"><?= $ok?'OK':'FAIL' ?></b></li><?php endforeach;?></ul><input type="hidden" name="install_action" value="environment-next"><button>Далее</button><?php elseif($step===2):?><input type="hidden" name="install_action" value="db-next"><?php foreach(['host','port','database','username','password','prefix'] as $f):?><label>db_<?=$f?><input name="db_<?=$f?>" value="<?=e($state['db'][$f]??'')?>"></label><?php endforeach;?><button>Проверить БД</button><?php elseif($step===3):?><input type="hidden" name="install_action" value="admin-next"><label>site_name<input name="site_name" value="<?=e($state['admin']['site_name'])?>"></label><label>admin_name<input name="admin_name" value="<?=e($state['admin']['admin_name'])?>"></label><label>admin_email<input name="admin_email" value="<?=e($state['admin']['admin_email'])?>"></label><label>admin_password<input type="password" name="admin_password"></label><label>admin_password_confirmation<input type="password" name="admin_password_confirmation"></label><button>Далее</button><?php else:?><input type="hidden" name="install_action" value="install-run"><p>Готово к установке полного CMS-скелета.</p><button>Установить Jura CMS</button><?php endif;?></form></div></div></body></html>
