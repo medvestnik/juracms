@@ -1,7 +1,52 @@
 <?php
 declare(strict_types=1);
-if (!defined('BASE_PATH')) define('BASE_PATH', dirname(__DIR__)); require_once BASE_PATH.'/core/start.php';
+if (!defined('BASE_PATH')) {
+    define('BASE_PATH', dirname(__DIR__));
+}
+if (!defined('INSTALL_PATH')) {
+    define('INSTALL_PATH', __DIR__);
+}
+$autoload = BASE_PATH . '/vendor/autoload.php';
+if (is_file($autoload)) {
+    require_once $autoload;
+}
+$helpers = BASE_PATH . '/core/Support/helpers.php';
+if (is_file($helpers)) {
+    require_once $helpers;
+}
+require_once BASE_PATH.'/core/start.php';
 $configFile=BASE_PATH.'/config.php'; $lockFile=BASE_PATH.'/storage/installed.lock'; $version=trim((string)@file_get_contents(BASE_PATH.'/VERSION'))?:'0.1.0';
+$config = is_file($configFile) ? require $configFile : [];
+$installed = is_file($configFile) && is_file($lockFile);
+if ($installed) {
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($method === 'POST' && (string)($_POST['install_action'] ?? '') === 'reset-installation') {
+        $allowReset = (bool)($config['app']['allow_install_reset'] ?? false);
+        $token = (string)($_POST['_token'] ?? '');
+        if ($allowReset && hash_equals(csrf_token(), $token)) {
+            @unlink($lockFile);
+            $_SESSION['installer'] = [];
+            redirect('/install/');
+        }
+    }
+    $siteName = (string)($config['app']['name'] ?? 'Jura CMS');
+    $adminEmail = null;
+    $usersWarning = null;
+    try {
+        $pdo = db_connect((array)($config['database'] ?? []));
+        $usersTable = jura_table('users');
+        $stmt = $pdo->query("SHOW TABLES LIKE " . $pdo->quote(str_replace('`', '', $usersTable)));
+        if ($stmt && $stmt->fetchColumn()) {
+            $adminEmail = $pdo->query('SELECT email FROM ' . $usersTable . ' ORDER BY id ASC LIMIT 1')->fetchColumn() ?: null;
+        } else {
+            $usersWarning = 'Таблица пользователей не найдена';
+        }
+    } catch (Throwable $e) {
+        $usersWarning = 'База данных недоступна: ' . $e->getMessage();
+    }
+    include __DIR__ . '/views/installed.php';
+    exit;
+}
 $_SESSION['installer']=$_SESSION['installer']??['step'=>1,'db'=>['host'=>'127.0.0.1','port'=>'3306','database'=>'','username'=>'','password'=>'','prefix'=>'jura_'],'admin'=>['site_name'=>'Jura CMS','admin_name'=>'','admin_email'=>'']];
 $state=&$_SESSION['installer']; $step=(int)$state['step']; $errors=[]; $method=strtoupper($_SERVER['REQUEST_METHOD']??'GET');
 if ($method==='POST') { $action=(string)($_POST['install_action']??'');
