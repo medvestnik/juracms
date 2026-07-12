@@ -1,7 +1,9 @@
 {
   "name": "Jura Default",
   "slug": "default",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "frontend",
+  "description": "Базова універсальна тема Jura CMS: головна, сторінки, блог з пагінацією, публікація, контакти, 404.",
+  "author": "Jura CMS",
   "ui_kit": "jura-ui"
 }

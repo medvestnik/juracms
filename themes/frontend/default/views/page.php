@@ -1,1 +1,9 @@
-<section class="card"><h1><?=e($page['title']??'')?></h1><div><?=nl2br(e($page['content']??''))?></div></section>
+<?php $page = $page ?? []; ?>
+<section class="section">
+  <div class="site-container">
+    <article class="card page-content">
+      <h1><?= e($page['title'] ?? '') ?></h1>
+      <?= $page['content'] ?? '' ?>
+    </article>
+  </div>
+</section>

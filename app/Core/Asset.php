@@ -45,6 +45,7 @@ final class Asset
             'css' => [
                 self::ui('jura_ui_css'),
                 '/public/assets/jura-ui/themes/' . config_value('ui.appearance.default_mode', 'light') . '.css',
+                '/themes/frontend/' . Theme::frontendTheme() . '/assets/theme.css',
             ],
             'js' => [self::ui('jura_ui_js')],
         ];
