@@ -63,7 +63,7 @@ if ($method==='POST') { $action=(string)($_POST['install_action']??'');
 if($action==='environment-next'){$step=2;$state['step']=2;}
 if($action==='db-next'){foreach(['host','port','database','username','password','prefix'] as $f){$state['db'][$f]=trim((string)($_POST['db_'.$f]??$state['db'][$f]));} try{db_connect($state['db']);$step=3;$state['step']=3;}catch(Throwable $e){$errors[]=$e->getMessage();$step=2;}}
 if($action==='admin-next'){foreach(['site_name','admin_name','admin_email'] as $f){$state['admin'][$f]=trim((string)($_POST[$f]??$state['admin'][$f]));}$p=(string)($_POST['admin_password']??'');$c=(string)($_POST['admin_password_confirmation']??''); if(!filter_var($state['admin']['admin_email'],FILTER_VALIDATE_EMAIL)||$p!==$c||strlen($p)<8){$errors[]='Проверьте email и пароль (минимум 8 символов).';$step=3;} else{$state['admin_password_hash']=password_hash($p,PASSWORD_DEFAULT);$step=4;$state['step']=4;}}
-if($action==='install-run'){ $db=$state['db']; $a=$state['admin']; $pdo=db_connect($db); $p=preg_replace('/[^a-zA-Z0-9_]/','',(string)$db['prefix'])?:'jura_';
+if($action==='install-run'){ try { $db=$state['db']; $a=$state['admin']; $pdo=db_connect($db); $p=preg_replace('/[^a-zA-Z0-9_]/','',(string)$db['prefix'])?:'jura_';
 $tables=[
 "{$p}user_groups"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(120) UNIQUE,name VARCHAR(191),description TEXT NULL,is_system TINYINT(1) DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
 "{$p}users"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,group_id INT UNSIGNED,name VARCHAR(191),email VARCHAR(191) UNIQUE,password_hash VARCHAR(255),status VARCHAR(40) DEFAULT 'active',email_verified_at TIMESTAMP NULL,last_login_at TIMESTAMP NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
@@ -118,6 +118,7 @@ else{$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_
 }
 file_put_contents($configFile,"<?php\n\nreturn ".var_export(['app'=>['name'=>$a['site_name'],'installed'=>true,'version'=>$version],'database'=>['connection'=>'mysql','host'=>$db['host'],'port'=>(int)$db['port'],'database'=>$db['database'],'username'=>$db['username'],'password'=>$db['password'],'prefix'=>$p,'charset'=>'utf8mb4']],true).";\n");
 file_put_contents($lockFile,json_encode(['installed_at'=>date(DATE_ATOM),'site_name'=>$a['site_name']],JSON_PRETTY_PRINT)); $_SESSION['installer']=[]; redirect('/admin/login');
+} catch (Throwable $e) { $errors[]='Помилка встановлення: '.$e->getMessage(); $step=4; $state['step']=4; }
 }
 }
 $checks=['PHP >= 8.1'=>version_compare(PHP_VERSION,'8.1.0','>='),'pdo_mysql'=>extension_loaded('pdo_mysql'),'mbstring'=>extension_loaded('mbstring'),'json'=>extension_loaded('json')];
