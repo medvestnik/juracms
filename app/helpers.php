@@ -57,6 +57,26 @@ if (!function_exists('cms_config')) {
     }
 }
 
+if (!function_exists('slugify')) {
+    function slugify(string $value): string
+    {
+        static $map = [
+            'а'=>'a','б'=>'b','в'=>'v','г'=>'h','ґ'=>'g','д'=>'d','е'=>'e','є'=>'ie','ж'=>'zh','з'=>'z',
+            'и'=>'y','і'=>'i','ї'=>'i','й'=>'i','к'=>'k','л'=>'l','м'=>'m','н'=>'n','о'=>'o','п'=>'p',
+            'р'=>'r','с'=>'s','т'=>'t','у'=>'u','ф'=>'f','х'=>'kh','ц'=>'ts','ч'=>'ch','ш'=>'sh','щ'=>'shch',
+            'ь'=>'','ю'=>'iu','я'=>'ia','ъ'=>'','э'=>'e','ё'=>'e','ы'=>'y',
+        ];
+        $value = mb_strtolower(trim($value));
+        $value = strtr($value, $map);
+        $transliterated = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if ($transliterated !== false) {
+            $value = $transliterated;
+        }
+        $value = preg_replace('/[^a-z0-9]+/', '-', $value) ?? '';
+        return trim($value, '-');
+    }
+}
+
 if (!function_exists('asset_url')) {
     function asset_url(string $path): string
     {
