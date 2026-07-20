@@ -30,5 +30,15 @@ require_once BASE_PATH . '/core/Installer/Runtime.php';
 require_once BASE_PATH . '/core/Updater/Updater.php';
 
 if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
+    // Some shared-hosting setups point session.save_path at a directory the
+    // site's PHP-FPM pool user can't write to. Use a project-local, known
+    // writable directory instead of relying on the global ini setting.
+    $sessionPath = BASE_PATH . '/storage/sessions';
+    if (!is_dir($sessionPath)) {
+        @mkdir($sessionPath, 0775, true);
+    }
+    if (is_dir($sessionPath) && is_writable($sessionPath)) {
+        session_save_path($sessionPath);
+    }
     session_start();
 }

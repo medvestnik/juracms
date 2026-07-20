@@ -17,10 +17,13 @@ composer.phar
 !/storage/.gitkeep
 !/storage/backups/
 !/storage/updates/
+!/storage/sessions/
 /storage/backups/*
 !/storage/backups/.gitkeep
 /storage/updates/*
 !/storage/updates/.gitkeep
+/storage/sessions/*
+!/storage/sessions/.gitkeep
 /cache/*
 !/cache/.gitkeep
 /tmp/
