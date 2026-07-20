@@ -60,6 +60,16 @@ $installerState['step'] = max(1, min(4, (int) $installerState['step']));
 $_SESSION['installer'] = $installerState;
 $state=&$_SESSION['installer']; $step=(int)$state['step']; $errors=[]; $method=strtoupper($_SERVER['REQUEST_METHOD']??'GET');
 if ($method==='POST') { $action=(string)($_POST['install_action']??'');
+// PHP sessions are unreliable on some hosts (see core/start.php); the wizard
+// also round-trips its state through hidden "carry_*" fields in the browser
+// so a broken session doesn't silently drop earlier steps' input.
+foreach (['host','port','database','username','password','prefix'] as $f) {
+    if (isset($_POST['carry_db_'.$f]) && $_POST['carry_db_'.$f] !== '') { $state['db'][$f] = (string) $_POST['carry_db_'.$f]; }
+}
+foreach (['site_name','admin_name','admin_email'] as $f) {
+    if (isset($_POST['carry_admin_'.$f]) && $_POST['carry_admin_'.$f] !== '') { $state['admin'][$f] = (string) $_POST['carry_admin_'.$f]; }
+}
+if (!empty($_POST['carry_admin_password_hash'])) { $state['admin_password_hash'] = (string) $_POST['carry_admin_password_hash']; }
 if($action==='environment-next'){$step=2;$state['step']=2;}
 if($action==='db-next'){foreach(['host','port','database','username','password','prefix'] as $f){$state['db'][$f]=trim((string)($_POST['db_'.$f]??$state['db'][$f]));} try{db_connect($state['db']);$step=3;$state['step']=3;}catch(Throwable $e){$errors[]=$e->getMessage();$step=2;}}
 if($action==='admin-next'){foreach(['site_name','admin_name','admin_email'] as $f){$state['admin'][$f]=trim((string)($_POST[$f]??$state['admin'][$f]));}$p=(string)($_POST['admin_password']??'');$c=(string)($_POST['admin_password_confirmation']??''); if(!filter_var($state['admin']['admin_email'],FILTER_VALIDATE_EMAIL)||$p!==$c||strlen($p)<8){$errors[]='Проверьте email и пароль (минимум 8 символов).';$step=3;} else{$state['admin_password_hash']=password_hash($p,PASSWORD_DEFAULT);$step=4;$state['step']=4;}}
