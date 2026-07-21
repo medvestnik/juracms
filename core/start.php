@@ -30,15 +30,34 @@ require_once BASE_PATH . '/core/Installer/Runtime.php';
 require_once BASE_PATH . '/core/Updater/Updater.php';
 
 if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
-    // Some shared-hosting setups point session.save_path at a directory the
-    // site's PHP-FPM pool user can't write to. Use a project-local, known
-    // writable directory instead of relying on the global ini setting.
-    $sessionPath = BASE_PATH . '/storage/sessions';
-    if (!is_dir($sessionPath)) {
-        @mkdir($sessionPath, 0775, true);
+    // Some shared-hosting setups make the filesystem session path unwritable
+    // for this site's PHP-FPM pool user (global ini path, or even our own
+    // storage/sessions if it ends up owned by a different deploy user).
+    // Prefer DB-backed sessions once the app is installed, since we already
+    // know the database connection works; fall back to files otherwise.
+    $dbSessionsReady = false;
+    if (\Core\Installer\Runtime::isInstalled()) {
+        try {
+            $sessionPdo = db_connect((array) cms_config('database', []));
+            $sessionTable = jura_table('sessions');
+            $sessionPdo->exec("CREATE TABLE IF NOT EXISTS {$sessionTable} (id VARCHAR(191) PRIMARY KEY, data MEDIUMTEXT NULL, last_activity INT UNSIGNED) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            session_set_save_handler(new \App\Core\DbSessionHandler($sessionPdo, $sessionTable), true);
+            $dbSessionsReady = true;
+        } catch (\Throwable) {
+            $dbSessionsReady = false;
+        }
     }
-    if (is_dir($sessionPath) && is_writable($sessionPath)) {
-        session_save_path($sessionPath);
+    if (!$dbSessionsReady) {
+        // Some shared-hosting setups point session.save_path at a directory the
+        // site's PHP-FPM pool user can't write to. Use a project-local, known
+        // writable directory instead of relying on the global ini setting.
+        $sessionPath = BASE_PATH . '/storage/sessions';
+        if (!is_dir($sessionPath)) {
+            @mkdir($sessionPath, 0775, true);
+        }
+        if (is_dir($sessionPath) && is_writable($sessionPath)) {
+            session_save_path($sessionPath);
+        }
     }
     session_start();
 }
