@@ -56,7 +56,10 @@ function ensure_cms_schema(PDO $pdo): void
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('locales') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(16) UNIQUE,name VARCHAR(191),native_name VARCHAR(191),is_default TINYINT(1) DEFAULT 0,is_active TINYINT(1) DEFAULT 1,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('form_submissions') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,form_code VARCHAR(120),locale VARCHAR(16) NULL,source_url VARCHAR(255) NULL,name VARCHAR(191) NULL,email VARCHAR(191) NULL,phone VARCHAR(80) NULL,message TEXT NULL,payload_json JSON NULL,status VARCHAR(40) DEFAULT 'new',ip_address VARCHAR(45) NULL,user_agent VARCHAR(255) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('migrations') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,migration VARCHAR(191) UNIQUE,batch INT UNSIGNED DEFAULT 1,executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('settings') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,setting_key VARCHAR(191) UNIQUE,setting_value TEXT NULL,setting_type VARCHAR(40) DEFAULT 'string',group_name VARCHAR(80) DEFAULT 'system',updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     foreach ([
+        ['settings', 'setting_type', "VARCHAR(40) DEFAULT 'string'"],
+        ['settings', 'group_name', "VARCHAR(80) DEFAULT 'system'"],
         ['pages', 'canonical_path', 'VARCHAR(191) NULL'],
         ['pages', 'og_title', 'VARCHAR(191) NULL'],
         ['pages', 'og_description', 'TEXT NULL'],
@@ -285,8 +288,11 @@ switch (true) {
                 $_SESSION['admin_user_id'] = (int) $user['id'];
                 $_SESSION['admin_user_email'] = $user['email'];
                 redirect('/admin');
-            } catch (Throwable) {
+            } catch (RuntimeException) {
                 session_flash('auth_error', 'Неверный email/пароль.');
+                redirect('/admin/login');
+            } catch (Throwable $e) {
+                session_flash('auth_error', 'Помилка бази даних: ' . $e->getMessage());
                 redirect('/admin/login');
             }
         }
