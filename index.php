@@ -672,6 +672,17 @@ if (str_starts_with($path, '/admin')) {
                     }
                     $msg = 'Меню оновлено: ' . count($items) . ' пунктів';
                 }
+                if ($action === 'refresh_demo_content') {
+                    $settings = cms_settings($pdo);
+                    $siteName = $settings['site_name'] ?? 'Jura CMS';
+                    $homeContent = '<p>' . e($siteName) . ' &mdash; це легка система керування сайтом із класичною установкою в корінь хостингу та сучасною адмін-панеллю. Створюйте сторінки, ведіть блог, керуйте медіатекою та меню &mdash; все з коробки.</p><p>Ця сторінка, як і сторінки &laquo;Про нас&raquo; та &laquo;Контакти&raquo;, &mdash; демонстраційний контент. Відредагуйте або видаліть його в розділі <strong>Сторінки</strong> адмін-панелі.</p>';
+                    $aboutContent = '<p>' . e($siteName) . ' працює на Jura CMS &mdash; системі керування сайтом, що поєднує простоту класичних движків із зручністю адмін-панелі нового покоління.</p><p>У цьому розділі зазвичай розповідають історію компанії, місію та команду. Замініть цей текст власним описом у розділі <strong>Сторінки</strong>.</p>';
+                    $contactsContent = '<p>Залишились питання? Напишіть нам &mdash; форма нижче надсилає повідомлення прямо на пошту адміністратора сайту.</p>';
+                    $pdo->prepare('UPDATE ' . jura_table('pages') . " SET content=? WHERE slug='home' ORDER BY id LIMIT 1")->execute([$homeContent]);
+                    $pdo->prepare('UPDATE ' . jura_table('pages') . " SET content=? WHERE slug='about' ORDER BY id LIMIT 1")->execute([$aboutContent]);
+                    $pdo->prepare('UPDATE ' . jura_table('pages') . " SET content=? WHERE slug='contacts' ORDER BY id LIMIT 1")->execute([$contactsContent]);
+                    $msg = 'Демо-контент оновлено на сторінках home, about, contacts';
+                }
             } catch (Throwable $e) {
                 session_flash('maint_error', $e->getMessage());
                 redirect('/admin/maintenance');
