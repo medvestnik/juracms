@@ -17,14 +17,20 @@ if (is_file($helpers)) {
 require_once BASE_PATH.'/core/start.php';
 $configFile=BASE_PATH.'/config.php'; $lockFile=BASE_PATH.'/storage/installed.lock'; $version=trim((string)@file_get_contents(BASE_PATH.'/VERSION'))?:'0.1.0';
 $config = is_file($configFile) ? require $configFile : [];
-$installed = is_file($configFile) && is_file($lockFile);
+$installed = \Core\Installer\Runtime::isInstalled();
 if ($installed) {
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
     if ($method === 'POST' && (string)($_POST['install_action'] ?? '') === 'reset-installation') {
         $allowReset = (bool)($config['app']['allow_install_reset'] ?? false);
         $token = (string)($_POST['_token'] ?? '');
         if ($allowReset && hash_equals(csrf_token(), $token)) {
+            // isInstalled() now treats config.php's app.installed flag as
+            // authoritative (a missing lock file alone is self-healed, so a
+            // redeploy that wipes storage/ doesn't force reinstallation).
+            // A real reset must flip that flag, not just remove the lock.
             @unlink($lockFile);
+            $config['app']['installed'] = false;
+            @file_put_contents($configFile, "<?php\n\nreturn " . var_export($config, true) . ";\n");
             $_SESSION['installer'] = [];
             redirect('/install/');
         }
