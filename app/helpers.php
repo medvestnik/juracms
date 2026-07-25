@@ -181,7 +181,46 @@ if (!function_exists('db_connect')) {
         return new PDO($dsn, (string) $db['username'], (string) $db['password'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_TIMEOUT => 5,
         ]);
+    }
+}
+
+if (!function_exists('shell_available')) {
+    function shell_available(): bool
+    {
+        static $available = null;
+        if ($available === null) {
+            $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+            $available = function_exists('shell_exec') && !in_array('shell_exec', $disabled, true);
+        }
+        return $available;
+    }
+}
+
+if (!function_exists('safe_shell_exec')) {
+    function safe_shell_exec(string $command): string
+    {
+        if (!shell_available()) {
+            return '';
+        }
+        try {
+            return (string) (@shell_exec($command) ?? '');
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+}
+
+if (!function_exists('exec_available')) {
+    function exec_available(): bool
+    {
+        static $available = null;
+        if ($available === null) {
+            $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+            $available = function_exists('exec') && !in_array('exec', $disabled, true);
+        }
+        return $available;
     }
 }
 

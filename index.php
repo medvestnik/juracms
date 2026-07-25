@@ -367,7 +367,9 @@ if (str_starts_with($path, '/admin')) {
         $lib = $_POST['lib'] ?? '';
         $result = '';
         $tmpDir = sys_get_temp_dir() . '/jura-lib-update-' . $lib . '-' . time();
-        if ($lib === 'juraui') {
+        if (!exec_available()) {
+            $result = 'Функція exec вимкнена на цьому хостингу — оновлення бібліотек через адмінку недоступне.';
+        } elseif ($lib === 'juraui') {
             $cloneCmd = 'git clone --depth 1 https://github.com/medvestnik/juraui.git ' . escapeshellarg($tmpDir) . ' 2>&1';
             exec($cloneCmd, $out, $code);
             if ($code === 0) {
@@ -701,9 +703,9 @@ if (str_starts_with($path, '/admin')) {
         if (is_file($lockFile)) {
             $lockData = json_decode((string) file_get_contents($lockFile), true) ?: [];
         }
-        $gitRemote = trim((string) shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' remote get-url origin 2>/dev/null')) ?: '';
-        $gitBranch = trim((string) shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' rev-parse --abbrev-ref HEAD 2>/dev/null')) ?: '';
-        $gitLastCommit = trim((string) shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' log -1 --format="%h %s (%cr)" 2>/dev/null')) ?: '';
+        $gitRemote = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' remote get-url origin 2>/dev/null'));
+        $gitBranch = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' rev-parse --abbrev-ref HEAD 2>/dev/null'));
+        $gitLastCommit = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' log -1 --format="%h %s (%cr)" 2>/dev/null'));
 
         // Migrations info
         $migrationsDir = BASE_PATH . '/migrations';
@@ -729,8 +731,12 @@ if (str_starts_with($path, '/admin')) {
         if ($method === 'POST') {
             $action = (string) ($_POST['action'] ?? '');
             if ($action === 'git_pull') {
-                $output = shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' pull 2>&1');
-                session_flash('upd_success', 'git pull: ' . ($output ?: 'виконано'));
+                if (!shell_available()) {
+                    session_flash('upd_error', 'Функція shell_exec вимкнена на цьому хостингу — git pull через адмінку недоступний.');
+                } else {
+                    $output = safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' pull 2>&1');
+                    session_flash('upd_success', 'git pull: ' . ($output !== '' ? $output : 'виконано'));
+                }
                 redirect('/admin/updates');
             }
             if ($action === 'run_migrations') {
