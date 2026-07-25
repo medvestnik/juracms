@@ -23,6 +23,16 @@ $metaDescription = $meta_description ?? '';
   <?php foreach ($assets['css'] ?? [] as $css): ?>
   <link rel="stylesheet" href="<?= e(asset_url($css)) ?>">
   <?php endforeach; ?>
+  <script>
+  (function(){
+    try {
+      var saved = localStorage.getItem('jura-site-theme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch (e) {}
+  })();
+  </script>
   <?php $gtmId = trim((string) ($settings['gtm_id'] ?? '')); if ($gtmId !== ''): ?>
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','<?= e($gtmId) ?>');</script>
   <?php endif; ?>
@@ -31,8 +41,7 @@ $metaDescription = $meta_description ?? '';
 <div class="site-wrap">
   <header class="site-header">
     <div class="site-container site-header__bar">
-      <a class="site-logo" href="/"><?= e($siteName) ?></a>
-      <button type="button" class="site-nav-toggle" id="site-nav-toggle" aria-label="Меню" aria-expanded="false">☰</button>
+      <a class="site-logo" href="/"><span class="site-logo__mark">J</span><?= e($siteName) ?></a>
       <?php if (!empty($headerItems)): ?>
       <nav class="site-nav" id="site-nav">
         <?php foreach ($headerItems as $item): $url = (string) $item['url']; ?>
@@ -40,6 +49,12 @@ $metaDescription = $meta_description ?? '';
         <?php endforeach; ?>
       </nav>
       <?php endif; ?>
+      <div class="site-header__right">
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Перемкнути тему">
+          <span class="icon-light">☀️</span><span class="icon-dark">🌙</span>
+        </button>
+        <button type="button" class="site-nav-toggle" id="site-nav-toggle" aria-label="Меню" aria-expanded="false">☰</button>
+      </div>
     </div>
   </header>
 
@@ -82,6 +97,20 @@ $metaDescription = $meta_description ?? '';
   toggle.addEventListener('click', function(){
     var open = nav.classList.toggle('is-open');
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+})();
+(function(){
+  var btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  function currentTheme(){
+    var attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'light' || attr === 'dark') return attr;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  btn.addEventListener('click', function(){
+    var next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('jura-site-theme', next); } catch (e) {}
   });
 })();
 </script>

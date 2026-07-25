@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jura CMS Installer</title><link rel="stylesheet" href="/install/assets/installer.css"></head>
-<body><div class="wrap"><div class="card"><h1>Jura CMS уже установлена</h1>
+<body><div class="wrap"><div class="card"><h1><?= !empty($justInstalled) ? 'Установка завершена!' : 'Jura CMS уже установлена' ?></h1>
 <ul>
 <li><b>site_name:</b> <?= e($siteName) ?></li>
 <li><b>version:</b> <?= e((string)($config['app']['version'] ?? $version)) ?></li>

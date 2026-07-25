@@ -31,6 +31,46 @@ if (isset($pdo)) {
 </section>
 <?php endif; ?>
 
+<section class="section">
+  <div class="site-container">
+    <h2 class="section-title">Все необхідне для сайту</h2>
+    <p class="section-subtitle">Jura CMS з коробки: сторінки, блог, медіатека та меню — керуйте всім з однієї адмін-панелі.</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-card__icon">📄</div>
+        <h3>Сторінки</h3>
+        <p>Довільні сторінки з SEO-полями, шаблонами та власними роутами.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">📰</div>
+        <h3>Блог</h3>
+        <p>Публікації з категоріями, зображеннями та пагінацією з коробки.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">🖼️</div>
+        <h3>Медіатека</h3>
+        <p>Завантаження та керування зображеннями й файлами сайту.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">🧭</div>
+        <h3>Меню та редіректи</h3>
+        <p>Гнучке керування навігацією, 301/302 редіректами та маршрутами.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="site-container card">
+    <div class="stats-row">
+      <div class="stat"><strong>100%</strong><span>Open source</span></div>
+      <div class="stat"><strong>&lt;5 хв</strong><span>Час установки</span></div>
+      <div class="stat"><strong>2</strong><span>Готові теми (адмін + фронт)</span></div>
+      <div class="stat"><strong>∞</strong><span>Сторінок і публікацій</span></div>
+    </div>
+  </div>
+</section>
+
 <?php if (!empty($latestPosts)): ?>
 <section class="section">
   <div class="site-container">
@@ -53,3 +93,13 @@ if (isset($pdo)) {
   </div>
 </section>
 <?php endif; ?>
+
+<section class="section">
+  <div class="site-container">
+    <div class="cta-banner">
+      <h2>Готові почати?</h2>
+      <p>Увійдіть в адмін-панель і налаштуйте сайт під себе — сторінки, меню, контакти та вигляд.</p>
+      <a class="btn btn-on-dark" href="/admin">Відкрити адмін-панель</a>
+    </div>
+  </div>
+</section>
