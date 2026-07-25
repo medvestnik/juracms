@@ -36,6 +36,15 @@ final class Runtime
             return false;
         }
 
+        if (!self::coreTablesExist($config)) {
+            // config.php says installed, but the database itself doesn't have
+            // the core tables (e.g. someone dropped everything to redo the
+            // install from scratch). Treat that as "not installed" so the
+            // user lands back on the wizard instead of a fatal error on the
+            // first missing table.
+            return false;
+        }
+
         // config.php with app.installed=true is the authoritative signal.
         // storage/installed.lock is just metadata (install date, etc.) — on
         // some hosts a redeploy can wipe the gitignored storage/ directory
@@ -55,6 +64,23 @@ final class Runtime
         }
 
         return true;
+    }
+
+    private static function coreTablesExist(array $config): bool
+    {
+        $db = (array) ($config['database'] ?? []);
+        if (empty($db)) {
+            return false;
+        }
+
+        try {
+            $pdo = \db_connect($db);
+            $prefix = preg_replace('/[^a-zA-Z0-9_]/', '', (string) ($db['prefix'] ?? 'jura_')) ?: 'jura_';
+            $stmt = $pdo->query('SHOW TABLES LIKE ' . $pdo->quote($prefix . 'users'));
+            return (bool) ($stmt && $stmt->fetchColumn());
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public static function installerExists(): bool

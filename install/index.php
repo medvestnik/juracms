@@ -50,6 +50,7 @@ if ($installed) {
     } catch (Throwable $e) {
         $usersWarning = 'База данных недоступна: ' . $e->getMessage();
     }
+    $justInstalled = (string) ($_GET['done'] ?? '') === '1';
     include __DIR__ . '/views/installed.php';
     exit;
 }
@@ -98,7 +99,15 @@ $tables=[
 "{$p}products"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,category_id INT UNSIGNED NULL,title VARCHAR(191),slug VARCHAR(191),sku VARCHAR(80),description MEDIUMTEXT NULL,short_description TEXT NULL,price DECIMAL(12,2) DEFAULT 0,old_price DECIMAL(12,2) DEFAULT 0,currency VARCHAR(10) DEFAULT 'USD',quantity INT DEFAULT 0,status VARCHAR(20) DEFAULT 'draft',featured_image_id INT UNSIGNED NULL,meta_title VARCHAR(191) NULL,meta_description TEXT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
 "{$p}product_images"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,product_id INT UNSIGNED,media_file_id INT UNSIGNED,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP","{$p}product_attributes"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(191),code VARCHAR(120),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
 "{$p}product_attribute_values"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,product_id INT UNSIGNED,attribute_id INT UNSIGNED,value TEXT", "{$p}routes"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,path VARCHAR(191) UNIQUE,entity_type VARCHAR(40),entity_id INT UNSIGNED,status VARCHAR(20) DEFAULT 'active',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", "{$p}redirects"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,source_path VARCHAR(191),target_path VARCHAR(191),status_code SMALLINT DEFAULT 301,is_active TINYINT(1) DEFAULT 1,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", "{$p}migrations"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,migration VARCHAR(191),batch INT DEFAULT 1,executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "{$p}activity_logs"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id INT UNSIGNED NULL,action VARCHAR(120),entity_type VARCHAR(40),entity_id INT UNSIGNED NULL,message TEXT NULL,ip_address VARCHAR(45) NULL,user_agent VARCHAR(255) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-]; foreach($tables as $n=>$d){$pdo->exec("CREATE TABLE IF NOT EXISTS `{$n}` ({$d}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");}
+];
+if (!empty($_POST['clean_install'])) {
+    $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+    foreach (array_merge(array_keys($tables), ["{$p}locales", "{$p}form_submissions", "{$p}sessions"]) as $n) {
+        $pdo->exec("DROP TABLE IF EXISTS `{$n}`");
+    }
+    $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+}
+foreach($tables as $n=>$d){$pdo->exec("CREATE TABLE IF NOT EXISTS `{$n}` ({$d}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");}
 $groups=['users','authors','editors','moderators','administrators','super_administrators']; foreach($groups as $g){$pdo->prepare('INSERT IGNORE INTO '.jura_table('user_groups').' (code,name,description,is_system) VALUES (?,?,?,1)')->execute([$g,ucwords(str_replace('_',' ',$g)),$g]);}
 $perms=['dashboard.view','users.view','users.create','users.edit','users.delete','groups.view','groups.edit','pages.view','pages.create','pages.edit','pages.delete','posts.view','posts.create','posts.edit','posts.delete','products.view','products.create','products.edit','products.delete','media.view','media.upload','settings.view','settings.edit','system.update'];
 foreach($perms as $c){$pdo->prepare('INSERT IGNORE INTO '.jura_table('permissions').' (code,name,description) VALUES (?,?,?)')->execute([$c,$c,$c]);}
@@ -108,7 +117,7 @@ $uid=(int)$pdo->lastInsertId();
 $allPermIds=$pdo->query('SELECT id FROM '.jura_table('permissions'))->fetchAll(PDO::FETCH_COLUMN); foreach($allPermIds as $pid){$pdo->prepare('INSERT IGNORE INTO '.jura_table('group_permissions').' (group_id,permission_id) VALUES (?,?)')->execute([$super,$pid]); if((int)$pid!== (int)$pdo->query('SELECT id FROM '.jura_table('permissions')." WHERE code='system.update'")->fetch()['id']){$pdo->prepare('INSERT IGNORE INTO '.jura_table('group_permissions').' (group_id,permission_id) VALUES (?,?)')->execute([$adminGroup,$pid]);}}
 $homeContent='<p>Jura CMS &mdash; це легка система керування сайтом із класичною установкою в корінь хостингу та сучасною адмін-панеллю. Створюйте сторінки, ведіть блог, керуйте медіатекою та меню &mdash; все з коробки.</p><p>Ця сторінка, як і сторінки &laquo;Про нас&raquo; та &laquo;Контакти&raquo;, &mdash; демонстраційний контент. Відредагуйте або видаліть його в розділі <strong>Сторінки</strong> адмін-панелі.</p>';
 $pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,excerpt,status,template,published_at) VALUES (NULL,?,?,?,?,?,?,?,NOW())')->execute([$uid,'Главная','home',$homeContent,'Jura CMS &mdash; легка CMS з класичною установкою та сучасною адмін-панеллю.','published','home']);
-$aboutContent='<p>'.e($a['site_name']).' працює на Jura CMS &mdash; системі керування сайтом, що поєднує простоту класичних движків із зручністю адмін-панелі нового покоління.</p><p>У цьому розділі зазвичай розповідають історію компанії, місію та команду. Замініть цей текст власним описом у розділі <strong>Сторінки</strong>.</p>';
+$aboutContent='<p>'.e($a['site_name']).' працює на Jura CMS &mdash; системі керування сайтом, що поєднує простоту класичних движків із зручністю адмін-панелі нового покоління.</p><p>У цьому розділі зазвичай розповідають історію компанії, місію та команду. Замініть цей текст власним описом у розділі <strong>Сторінки</strong>.</p><div class="feature-grid" style="margin-top:1.75rem"><div class="feature-card"><div class="feature-card__icon">🎯</div><h3>Місія</h3><p>Дати простий та зрозумілий інструмент для створення й розвитку сайту.</p></div><div class="feature-card"><div class="feature-card__icon">⚡</div><h3>Швидкість</h3><p>Мінімум залежностей, встановлення в корінь хостингу за кілька хвилин.</p></div><div class="feature-card"><div class="feature-card__icon">🤝</div><h3>Підтримка</h3><p>Оновлення та документація для впевненого старту й розвитку проєкту.</p></div></div>';
 $pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,published_at) VALUES (NULL,?,?,?,?,?,NOW())')->execute([$uid,'О нас','about',$aboutContent,'published']);
 $aboutId=(int)$pdo->lastInsertId();
 $contactsContent='<p>Залишились питання? Напишіть нам &mdash; форма нижче надсилає повідомлення прямо на пошту адміністратора сайту.</p>';
@@ -136,7 +145,7 @@ elseif($hasGroupName){$pdo->prepare('INSERT INTO '.jura_table('settings').' (set
 else{$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1]]);}
 }
 file_put_contents($configFile,"<?php\n\nreturn ".var_export(['app'=>['name'=>$a['site_name'],'installed'=>true,'version'=>$version],'database'=>['connection'=>'mysql','host'=>$db['host'],'port'=>(int)$db['port'],'database'=>$db['database'],'username'=>$db['username'],'password'=>$db['password'],'prefix'=>$p,'charset'=>'utf8mb4']],true).";\n");
-file_put_contents($lockFile,json_encode(['installed_at'=>date(DATE_ATOM),'site_name'=>$a['site_name']],JSON_PRETTY_PRINT)); $_SESSION['installer']=[]; redirect('/admin/login');
+file_put_contents($lockFile,json_encode(['installed_at'=>date(DATE_ATOM),'site_name'=>$a['site_name']],JSON_PRETTY_PRINT)); $_SESSION['installer']=[]; redirect('/install/?done=1');
 } catch (Throwable $e) { $errors[]='Помилка встановлення: '.$e->getMessage(); $step=4; $state['step']=4; }
 }
 }

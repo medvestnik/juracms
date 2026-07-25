@@ -367,7 +367,9 @@ if (str_starts_with($path, '/admin')) {
         $lib = $_POST['lib'] ?? '';
         $result = '';
         $tmpDir = sys_get_temp_dir() . '/jura-lib-update-' . $lib . '-' . time();
-        if ($lib === 'juraui') {
+        if (!exec_available()) {
+            $result = 'Функція exec вимкнена на цьому хостингу — оновлення бібліотек через адмінку недоступне.';
+        } elseif ($lib === 'juraui') {
             $cloneCmd = 'git clone --depth 1 https://github.com/medvestnik/juraui.git ' . escapeshellarg($tmpDir) . ' 2>&1';
             exec($cloneCmd, $out, $code);
             if ($code === 0) {
@@ -666,7 +668,7 @@ if (str_starts_with($path, '/admin')) {
                         $menuId = (int) $menu['id'];
                     }
                     $pdo->prepare('DELETE FROM ' . jura_table('menu_items') . ' WHERE menu_id=?')->execute([$menuId]);
-                    $items = [['Головна', '/'], ['Блог', '/blog'], ['Контакти', '/contacts']];
+                    $items = [['Головна', '/'], ['Про нас', '/about'], ['Блог', '/blog'], ['Контакти', '/contacts']];
                     foreach ($items as $i => [$label, $url]) {
                         $pdo->prepare('INSERT INTO ' . jura_table('menu_items') . ' (menu_id,title,url,sort_order,status) VALUES (?,?,?,?,?)')->execute([$menuId, $label, $url, $i + 1, 'active']);
                     }
@@ -676,7 +678,7 @@ if (str_starts_with($path, '/admin')) {
                     $settings = cms_settings($pdo);
                     $siteName = $settings['site_name'] ?? 'Jura CMS';
                     $homeContent = '<p>' . e($siteName) . ' &mdash; це легка система керування сайтом із класичною установкою в корінь хостингу та сучасною адмін-панеллю. Створюйте сторінки, ведіть блог, керуйте медіатекою та меню &mdash; все з коробки.</p><p>Ця сторінка, як і сторінки &laquo;Про нас&raquo; та &laquo;Контакти&raquo;, &mdash; демонстраційний контент. Відредагуйте або видаліть його в розділі <strong>Сторінки</strong> адмін-панелі.</p>';
-                    $aboutContent = '<p>' . e($siteName) . ' працює на Jura CMS &mdash; системі керування сайтом, що поєднує простоту класичних движків із зручністю адмін-панелі нового покоління.</p><p>У цьому розділі зазвичай розповідають історію компанії, місію та команду. Замініть цей текст власним описом у розділі <strong>Сторінки</strong>.</p>';
+                    $aboutContent = '<p>' . e($siteName) . ' працює на Jura CMS &mdash; системі керування сайтом, що поєднує простоту класичних движків із зручністю адмін-панелі нового покоління.</p><p>У цьому розділі зазвичай розповідають історію компанії, місію та команду. Замініть цей текст власним описом у розділі <strong>Сторінки</strong>.</p><div class="feature-grid" style="margin-top:1.75rem"><div class="feature-card"><div class="feature-card__icon">🎯</div><h3>Місія</h3><p>Дати простий та зрозумілий інструмент для створення й розвитку сайту.</p></div><div class="feature-card"><div class="feature-card__icon">⚡</div><h3>Швидкість</h3><p>Мінімум залежностей, встановлення в корінь хостингу за кілька хвилин.</p></div><div class="feature-card"><div class="feature-card__icon">🤝</div><h3>Підтримка</h3><p>Оновлення та документація для впевненого старту й розвитку проєкту.</p></div></div>';
                     $contactsContent = '<p>Залишились питання? Напишіть нам &mdash; форма нижче надсилає повідомлення прямо на пошту адміністратора сайту.</p>';
                     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET content=? WHERE slug='home' ORDER BY id LIMIT 1")->execute([$homeContent]);
                     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET content=? WHERE slug='about' ORDER BY id LIMIT 1")->execute([$aboutContent]);
@@ -701,9 +703,9 @@ if (str_starts_with($path, '/admin')) {
         if (is_file($lockFile)) {
             $lockData = json_decode((string) file_get_contents($lockFile), true) ?: [];
         }
-        $gitRemote = trim((string) shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' remote get-url origin 2>/dev/null')) ?: '';
-        $gitBranch = trim((string) shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' rev-parse --abbrev-ref HEAD 2>/dev/null')) ?: '';
-        $gitLastCommit = trim((string) shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' log -1 --format="%h %s (%cr)" 2>/dev/null')) ?: '';
+        $gitRemote = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' remote get-url origin 2>/dev/null'));
+        $gitBranch = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' rev-parse --abbrev-ref HEAD 2>/dev/null'));
+        $gitLastCommit = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' log -1 --format="%h %s (%cr)" 2>/dev/null'));
 
         // Migrations info
         $migrationsDir = BASE_PATH . '/migrations';
@@ -729,8 +731,12 @@ if (str_starts_with($path, '/admin')) {
         if ($method === 'POST') {
             $action = (string) ($_POST['action'] ?? '');
             if ($action === 'git_pull') {
-                $output = shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' pull 2>&1');
-                session_flash('upd_success', 'git pull: ' . ($output ?: 'виконано'));
+                if (!shell_available()) {
+                    session_flash('upd_error', 'Функція shell_exec вимкнена на цьому хостингу — git pull через адмінку недоступний.');
+                } else {
+                    $output = safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' pull 2>&1');
+                    session_flash('upd_success', 'git pull: ' . ($output !== '' ? $output : 'виконано'));
+                }
                 redirect('/admin/updates');
             }
             if ($action === 'run_migrations') {
