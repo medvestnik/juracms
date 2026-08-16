@@ -80,7 +80,7 @@ if (!empty($_POST['carry_admin_password_hash'])) { $state['admin_password_hash']
 if($action==='environment-next'){$step=2;$state['step']=2;}
 if($action==='db-next'){foreach(['host','port','database','username','password','prefix'] as $f){$state['db'][$f]=trim((string)($_POST['db_'.$f]??$state['db'][$f]));} try{db_connect($state['db']);$step=3;$state['step']=3;}catch(Throwable $e){$errors[]=$e->getMessage();$step=2;}}
 if($action==='admin-next'){foreach(['site_name','admin_name','admin_email'] as $f){$state['admin'][$f]=trim((string)($_POST[$f]??$state['admin'][$f]));}$p=(string)($_POST['admin_password']??'');$c=(string)($_POST['admin_password_confirmation']??''); if(!filter_var($state['admin']['admin_email'],FILTER_VALIDATE_EMAIL)||$p!==$c||strlen($p)<8){$errors[]='Проверьте email и пароль (минимум 8 символов).';$step=3;} else{$state['admin_password_hash']=password_hash($p,PASSWORD_DEFAULT);$step=4;$state['step']=4;}}
-if($action==='install-run'){ try { $db=$state['db']; $a=$state['admin']; $pdo=db_connect($db); $p=preg_replace('/[^a-zA-Z0-9_]/','',(string)$db['prefix'])?:'jura_';
+if($action==='install-run'){ try { @set_time_limit(180); @ignore_user_abort(true); $db=$state['db']; $a=$state['admin']; $pdo=db_connect($db); $p=preg_replace('/[^a-zA-Z0-9_]/','',(string)$db['prefix'])?:'jura_';
 $tables=[
 "{$p}user_groups"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(120) UNIQUE,name VARCHAR(191),description TEXT NULL,is_system TINYINT(1) DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
 "{$p}users"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,group_id INT UNSIGNED,name VARCHAR(191),email VARCHAR(191) UNIQUE,password_hash VARCHAR(255),status VARCHAR(40) DEFAULT 'active',email_verified_at TIMESTAMP NULL,last_login_at TIMESTAMP NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
@@ -101,10 +101,9 @@ $tables=[
 "{$p}product_attribute_values"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,product_id INT UNSIGNED,attribute_id INT UNSIGNED,value TEXT", "{$p}routes"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,path VARCHAR(191) UNIQUE,entity_type VARCHAR(40),entity_id INT UNSIGNED,status VARCHAR(20) DEFAULT 'active',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", "{$p}redirects"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,source_path VARCHAR(191),target_path VARCHAR(191),status_code SMALLINT DEFAULT 301,is_active TINYINT(1) DEFAULT 1,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP", "{$p}migrations"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,migration VARCHAR(191),batch INT DEFAULT 1,executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "{$p}activity_logs"=>"id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id INT UNSIGNED NULL,action VARCHAR(120),entity_type VARCHAR(40),entity_id INT UNSIGNED NULL,message TEXT NULL,ip_address VARCHAR(45) NULL,user_agent VARCHAR(255) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
 ];
 if (!empty($_POST['clean_install'])) {
+    $dropNames = array_map(fn($n) => "`{$n}`", array_merge(array_keys($tables), ["{$p}locales", "{$p}form_submissions", "{$p}sessions"]));
     $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
-    foreach (array_merge(array_keys($tables), ["{$p}locales", "{$p}form_submissions", "{$p}sessions"]) as $n) {
-        $pdo->exec("DROP TABLE IF EXISTS `{$n}`");
-    }
+    $pdo->exec('DROP TABLE IF EXISTS ' . implode(',', $dropNames));
     $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
 }
 foreach($tables as $n=>$d){$pdo->exec("CREATE TABLE IF NOT EXISTS `{$n}` ({$d}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");}
