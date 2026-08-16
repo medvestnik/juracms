@@ -773,6 +773,20 @@ if (str_starts_with($path, '/admin')) {
                 }
                 redirect('/admin/updates');
             }
+            if ($action === 'check_updates') {
+                $_SESSION['update_check'] = \Core\Updater\Updater::checkForUpdates();
+                redirect('/admin/updates');
+            }
+            if ($action === 'update_now') {
+                $updateResult = \Core\Updater\Updater::runAutomaticUpdate();
+                if ($updateResult['ok']) {
+                    session_flash('upd_success', $updateResult['message']);
+                    unset($_SESSION['update_check']);
+                } else {
+                    session_flash('upd_error', $updateResult['message']);
+                }
+                redirect('/admin/updates');
+            }
             if ($action === 'run_migrations') {
                 $ran = 0; $log = '';
                 if (is_dir($migrationsDir)) {
@@ -808,7 +822,7 @@ if (str_starts_with($path, '/admin')) {
             $lines = file($errorLogFile, FILE_IGNORE_NEW_LINES) ?: [];
             $errorLogTail = implode("\n", array_slice($lines, -100));
         }
-        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'pending_migrations' => $pendingMigrations, 'applied_migrations' => $appliedMigrations, 'error_log_tail' => $errorLogTail, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
+        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'pending_migrations' => $pendingMigrations, 'applied_migrations' => $appliedMigrations, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
         exit;
     }
 
