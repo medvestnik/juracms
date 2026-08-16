@@ -29,11 +29,19 @@ final class Runtime
 
     public static function isInstalled(): bool
     {
+        static $cached = null;
+        if ($cached !== null) {
+            // isInstalled() gets called several times per request (session
+            // bootstrap, the /install redirect guard, admin_require_auth, ...);
+            // it does a real DB round-trip below, so only pay for it once.
+            return $cached;
+        }
+
         $config = self::config();
         $installedFlag = (bool) ($config['app']['installed'] ?? false);
 
         if (!is_file(self::configFile()) || $installedFlag !== true) {
-            return false;
+            return $cached = false;
         }
 
         if (!self::coreTablesExist($config)) {
@@ -42,7 +50,7 @@ final class Runtime
             // install from scratch). Treat that as "not installed" so the
             // user lands back on the wizard instead of a fatal error on the
             // first missing table.
-            return false;
+            return $cached = false;
         }
 
         // config.php with app.installed=true is the authoritative signal.
@@ -63,7 +71,7 @@ final class Runtime
             ], JSON_PRETTY_PRINT));
         }
 
-        return true;
+        return $cached = true;
     }
 
     private static function coreTablesExist(array $config): bool
