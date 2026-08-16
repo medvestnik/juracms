@@ -51,8 +51,25 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
+const CMS_SCHEMA_VERSION = '1';
+
 function ensure_cms_schema(PDO $pdo): void
 {
+    static $ensuredThisRequest = false;
+    if ($ensuredThisRequest) {
+        return;
+    }
+    // This function used to run its full set of SHOW/CREATE/ALTER/INSERT
+    // IGNORE checks on every single request (frontend and admin alike),
+    // which is a lot of avoidable round-trips once the schema is already
+    // up to date. Short-circuit via a file marker; bump CMS_SCHEMA_VERSION
+    // whenever a table/column/default changes below so it re-runs once.
+    $marker = BASE_PATH . '/storage/schema-version.txt';
+    if (is_file($marker) && trim((string) @file_get_contents($marker)) === CMS_SCHEMA_VERSION) {
+        $ensuredThisRequest = true;
+        return;
+    }
+
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('locales') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(16) UNIQUE,name VARCHAR(191),native_name VARCHAR(191),is_default TINYINT(1) DEFAULT 0,is_active TINYINT(1) DEFAULT 1,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('form_submissions') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,form_code VARCHAR(120),locale VARCHAR(16) NULL,source_url VARCHAR(255) NULL,name VARCHAR(191) NULL,email VARCHAR(191) NULL,phone VARCHAR(80) NULL,message TEXT NULL,payload_json JSON NULL,status VARCHAR(40) DEFAULT 'new',ip_address VARCHAR(45) NULL,user_agent VARCHAR(255) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('migrations') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,migration VARCHAR(191) UNIQUE,batch INT UNSIGNED DEFAULT 1,executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -77,7 +94,17 @@ function ensure_cms_schema(PDO $pdo): void
         $tableName = str_replace('`', '', jura_table($table));
         $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}` LIKE " . $pdo->quote($column));
         if (!$stmt->fetch()) {
-            $pdo->exec("ALTER TABLE `{$tableName}` ADD `{$column}` {$definition}");
+            try {
+                $pdo->exec("ALTER TABLE `{$tableName}` ADD `{$column}` {$definition}");
+            } catch (\PDOException $e) {
+                // Concurrent requests can both see the column missing and both
+                // try to add it; the loser gets "Duplicate column" (42S21) —
+                // that just means another request already added it, not an
+                // error worth failing the whole request over.
+                if ($e->getCode() !== '42S21') {
+                    throw $e;
+                }
+            }
         }
     }
     $defaults = [
@@ -114,6 +141,13 @@ function ensure_cms_schema(PDO $pdo): void
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('locales') . ' (code,name,native_name,is_default,sort_order) VALUES (?,?,?,?,?)')
             ->execute($locale);
     }
+
+    $dir = dirname($marker);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    @file_put_contents($marker, CMS_SCHEMA_VERSION);
+    $ensuredThisRequest = true;
 }
 
 function current_locale(PDO $pdo, string $path): array
@@ -299,7 +333,7 @@ switch (true) {
         if (admin_is_authenticated()) {
             redirect('/admin');
         }
-        view_admin('login', ['title' => 'Sign in', 'layout' => 'auth', 'error' => session_flash('auth_error')]);
+        view_admin('login', ['title' => 'Вхід', 'layout' => 'auth', 'error' => session_flash('auth_error')]);
         exit;
     case $path === '/admin/logout':
         if ($method !== 'POST') {
@@ -320,7 +354,7 @@ if (str_starts_with($path, '/admin')) {
     ModuleLoader::hookEach('ensure_schema', $pdo);
 
     if ($path === '/admin') {
-        view_admin('dashboard', ['title' => 'Dashboard', 'stats' => admin_stats($pdo)]);
+        view_admin('dashboard', ['title' => 'Дашборд', 'stats' => admin_stats($pdo)]);
         exit;
     }
 
@@ -359,7 +393,7 @@ if (str_starts_with($path, '/admin')) {
             session_flash('success', 'Settings saved.');
             redirect('/admin/settings');
         }
-        view_admin('settings', ['title' => 'Settings', 'settings' => cms_settings($pdo), 'success' => session_flash('success')]);
+        view_admin('settings', ['title' => 'Налаштування', 'settings' => cms_settings($pdo), 'success' => session_flash('success')]);
         exit;
     }
 
@@ -423,17 +457,17 @@ if (str_starts_with($path, '/admin')) {
         } else {
             $result = 'Невідома бібліотека.';
         }
-        view_admin('settings', ['title' => 'Settings', 'settings' => cms_settings($pdo), 'success' => session_flash('success'), 'lib_update_result' => $result]);
+        view_admin('settings', ['title' => 'Налаштування', 'settings' => cms_settings($pdo), 'success' => session_flash('success'), 'lib_update_result' => $result]);
         exit;
     }
 
     if ($path === '/admin/pages' && $method === 'GET') {
         $pages = $pdo->query('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id ORDER BY p.sort_order,p.id")->fetchAll();
-        view_admin('pages', ['title' => 'Pages', 'pages' => $pages, 'edit' => null]);
+        view_admin('pages', ['title' => 'Сторінки', 'pages' => $pages, 'edit' => null]);
         exit;
     }
     if ($path === '/admin/pages/create' && $method === 'GET') {
-        view_admin('pages', ['title' => 'Add page', 'edit' => []]);
+        view_admin('pages', ['title' => 'Додати сторінку', 'edit' => []]);
         exit;
     }
     if ($path === '/admin/pages' && $method === 'POST') {
@@ -452,7 +486,7 @@ if (str_starts_with($path, '/admin')) {
     if (preg_match('#^/admin/pages/(\d+)/edit$#', $path, $matches) && $method === 'GET') {
         $stmt = $pdo->prepare('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id WHERE p.id=?");
         $stmt->execute([(int) $matches[1]]);
-        view_admin('pages', ['title' => 'Edit page', 'edit' => $stmt->fetch() ?: []]);
+        view_admin('pages', ['title' => 'Редагувати сторінку', 'edit' => $stmt->fetch() ?: []]);
         exit;
     }
     if (preg_match('#^/admin/pages/(\d+)$#', $path, $matches) && $method === 'POST') {
@@ -474,7 +508,7 @@ if (str_starts_with($path, '/admin')) {
 
     if ($path === '/admin/media') {
         $media = $pdo->query('SELECT * FROM ' . jura_table('media_files') . ' ORDER BY id DESC')->fetchAll();
-        view_admin('media', ['title' => 'Media', 'media' => $media, 'success' => session_flash('success'), 'error' => session_flash('error')]);
+        view_admin('media', ['title' => 'Медіа', 'media' => $media, 'success' => session_flash('success'), 'error' => session_flash('error')]);
         exit;
     }
     if ($path === '/admin/media/upload' && $method === 'POST') {
@@ -520,7 +554,7 @@ if (str_starts_with($path, '/admin')) {
         }
         $menuPages = $pdo->query('SELECT id,title,slug,template FROM ' . jura_table('pages') . " WHERE status='published' ORDER BY title")->fetchAll();
         $s = cms_settings($pdo);
-        view_admin('menus', ['title' => 'Menus', 'menus' => $pdo->query('SELECT * FROM ' . jura_table('menus') . ' ORDER BY name')->fetchAll(), 'items' => $pdo->query('SELECT i.*,m.name menu_name,m.code menu_code FROM ' . jura_table('menu_items') . ' i JOIN ' . jura_table('menus') . ' m ON m.id=i.menu_id ORDER BY m.name,i.sort_order,i.id')->fetchAll(), 'menu_pages' => $menuPages, 'menu_header' => $s['menu_header'] ?? 'main', 'menu_footer' => $s['menu_footer'] ?? 'main']);
+        view_admin('menus', ['title' => 'Меню', 'menus' => $pdo->query('SELECT * FROM ' . jura_table('menus') . ' ORDER BY name')->fetchAll(), 'items' => $pdo->query('SELECT i.*,m.name menu_name,m.code menu_code FROM ' . jura_table('menu_items') . ' i JOIN ' . jura_table('menus') . ' m ON m.id=i.menu_id ORDER BY m.name,i.sort_order,i.id')->fetchAll(), 'menu_pages' => $menuPages, 'menu_header' => $s['menu_header'] ?? 'main', 'menu_footer' => $s['menu_footer'] ?? 'main']);
         exit;
     }
 
@@ -536,7 +570,7 @@ if (str_starts_with($path, '/admin')) {
             }
             redirect('/admin/redirects');
         }
-        view_admin('redirects', ['title' => 'Redirects', 'redirects' => $pdo->query('SELECT * FROM ' . jura_table('redirects') . ' ORDER BY id DESC')->fetchAll()]);
+        view_admin('redirects', ['title' => 'Редіректи', 'redirects' => $pdo->query('SELECT * FROM ' . jura_table('redirects') . ' ORDER BY id DESC')->fetchAll()]);
         exit;
     }
 
@@ -692,7 +726,7 @@ if (str_starts_with($path, '/admin')) {
             session_flash('maint_success', $msg);
             redirect('/admin/maintenance');
         }
-        view_admin('maintenance', ['title' => 'Maintenance', 'flash_success' => session_flash('maint_success'), 'flash_error' => session_flash('maint_error')]);
+        view_admin('maintenance', ['title' => 'Обслуговування', 'flash_success' => session_flash('maint_success'), 'flash_error' => session_flash('maint_error')]);
         exit;
     }
 
@@ -768,7 +802,13 @@ if (str_starts_with($path, '/admin')) {
             }
         }
 
-        view_admin('updates', ['title' => 'Updates', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'pending_migrations' => $pendingMigrations, 'applied_migrations' => $appliedMigrations, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
+        $errorLogFile = BASE_PATH . '/logs/php-error.log';
+        $errorLogTail = '';
+        if (is_file($errorLogFile)) {
+            $lines = file($errorLogFile, FILE_IGNORE_NEW_LINES) ?: [];
+            $errorLogTail = implode("\n", array_slice($lines, -100));
+        }
+        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'pending_migrations' => $pendingMigrations, 'applied_migrations' => $appliedMigrations, 'error_log_tail' => $errorLogTail, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
         exit;
     }
 

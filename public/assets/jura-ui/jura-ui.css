@@ -1,42 +1,935 @@
-:root{
-  --jura-bg:#f3f6fb;
-  --jura-surface:#fff;
-  --jura-border:#d8e0ef;
-  --jura-text:#1f2a44;
-  --jura-primary:#2864f0;
-  --jura-primary-contrast:#fff;
+/* ================================================================
+   Jura UI — v0.2.0
+   Lightweight UI kit · medvestnik.github.io/juraui
+   ================================================================ */
+
+/* ----------------------------------------------------------------
+   1. Design Tokens — Default theme (Indigo)
+   ---------------------------------------------------------------- */
+:root {
+  /* Typography */
+  --jura-font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --jura-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Shape */
+  --jura-radius-sm:   8px;
+  --jura-radius:     12px;
+  --jura-radius-lg:  18px;
+  --jura-radius-full: 9999px;
+
+  /* Elevation */
+  --jura-shadow-xs: 0 1px 2px rgba(15,23,42,.05);
+  --jura-shadow-sm: 0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
+  --jura-shadow:    0 4px 16px rgba(15,23,42,.08), 0 1px 4px rgba(15,23,42,.04);
+  --jura-shadow-lg: 0 10px 40px rgba(15,23,42,.12), 0 4px 12px rgba(15,23,42,.06);
+
+  /* Motion */
+  --jura-ease: cubic-bezier(.4,0,.2,1);
+  --jura-dur: 150ms;
+
+  /* Surface */
+  --jura-bg:            #f8fafc;
+  --jura-surface:       #ffffff;
+  --jura-surface-2:     #f1f5f9;
+  --jura-surface-muted: #eef2ff;
+
+  /* Text */
+  --jura-text:          #0f172a;
+  --jura-text-muted:    #64748b;
+  --jura-text-subtle:   #94a3b8;
+
+  /* Border */
+  --jura-border:        #e2e8f0;
+  --jura-border-strong: #cbd5e1;
+
+  /* Primary — Indigo */
+  --jura-primary:       #4f46e5;
+  --jura-primary-dk:    #4338ca;
+  --jura-primary-lt:    #eef2ff;
+  --jura-primary-ring:  rgba(79,70,229,.22);
+  --jura-primary-fg:    #ffffff;
+
+  /* Semantic status */
+  --jura-success:    #059669; --jura-success-bg:  #d1fae5; --jura-success-fg:  #065f46;
+  --jura-warning:    #d97706; --jura-warning-bg:  #fef3c7; --jura-warning-fg:  #92400e;
+  --jura-danger:     #dc2626; --jura-danger-bg:   #fee2e2; --jura-danger-fg:   #991b1b;
+  --jura-info:       #0891b2; --jura-info-bg:     #e0f2fe; --jura-info-fg:     #0c4a6e;
 }
-*{box-sizing:border-box}
-body{margin:0;background:var(--jura-bg);color:var(--jura-text);font-family:Inter,Arial,sans-serif}
-a{color:inherit;text-decoration:none}
-.jura-layout{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
-.jura-sidebar{background:#111b33;color:#fff;padding:1rem;display:flex;flex-direction:column;gap:.75rem}
-.jura-sidebar nav{display:flex;flex-direction:column;gap:.35rem}
-.jura-sidebar nav a{padding:.45rem .55rem;border-radius:.4rem}
-.jura-sidebar nav a:hover{background:rgba(255,255,255,.14)}
-.jura-topbar{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.2rem;background:var(--jura-surface);border-bottom:1px solid var(--jura-border)}
-.jura-main{display:flex;flex-direction:column}
-.jura-content{padding:1.2rem}
-.jura-card{background:var(--jura-surface);border:1px solid var(--jura-border);border-radius:.75rem;padding:1rem;margin-bottom:1rem}
-.jura-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.55rem .95rem;border-radius:.55rem;border:1px solid transparent;cursor:pointer}
-.jura-btn-primary{background:var(--jura-primary);color:var(--jura-primary-contrast)}
-.jura-btn-secondary{background:#edf2ff;color:#0d2764;border-color:#cadaff}
-.jura-input{width:100%;padding:.6rem .7rem;border:1px solid var(--jura-border);border-radius:.45rem;margin:.25rem 0 .9rem}
-.jura-label{font-size:.9rem;display:block}
-.jura-alert{border-radius:.5rem;padding:.7rem .8rem;background:#e8f1ff;border:1px solid #cfe0ff;margin:.6rem 0}
-.jura-table{width:100%;border-collapse:collapse;background:var(--jura-surface);margin-top:.8rem}
-.jura-table th,.jura-table td{padding:.7rem;border:1px solid var(--jura-border);text-align:left}
-.jura-badge{display:inline-flex;align-items:center;justify-content:center;background:#dbe8ff;color:#173a8f;padding:.2rem .5rem;border-radius:999px;font-size:.8rem}
-.jura-tabs{list-style:none;padding:0;margin:0;display:grid;gap:.45rem}
-.jura-modal{position:fixed;inset:0;z-index:20}
-.jura-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
-.jura-modal__dialog{position:relative;max-width:420px;margin:14vh auto;background:#fff;padding:1rem;border-radius:.8rem;z-index:2}
-.jura-empty{padding:1rem;border:1px dashed var(--jura-border);border-radius:.6rem;color:#62708f;background:#f9fbff}
-.jura-grid{display:grid;gap:1rem}
-.jura-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
-.jura-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
-.jura-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin:.7rem 0}
-.jura-auth-page,.jura-installer-page{display:grid;place-items:center;min-height:100vh;padding:1rem}
-.jura-auth-wrap,.jura-installer-wrap{width:min(720px,100%)}
-.jura-auth-card{max-width:420px;margin:2rem auto}
-@media (max-width:980px){.jura-layout{grid-template-columns:1fr}.jura-grid-4,.jura-grid-2{grid-template-columns:1fr}}
+
+/* ----------------------------------------------------------------
+   2. Color Themes
+   ---------------------------------------------------------------- */
+
+[data-jura-theme="ocean"] {
+  --jura-primary:       #0891b2;
+  --jura-primary-dk:    #0e7490;
+  --jura-primary-lt:    #e0f2fe;
+  --jura-primary-ring:  rgba(8,145,178,.22);
+  --jura-bg:            #f0f9ff;
+  --jura-surface-muted: #e0f2fe;
+}
+
+[data-jura-theme="emerald"] {
+  --jura-primary:       #059669;
+  --jura-primary-dk:    #047857;
+  --jura-primary-lt:    #d1fae5;
+  --jura-primary-ring:  rgba(5,150,105,.22);
+  --jura-bg:            #f0fdf4;
+  --jura-surface-muted: #dcfce7;
+}
+
+[data-jura-theme="rose"] {
+  --jura-primary:       #e11d48;
+  --jura-primary-dk:    #be123c;
+  --jura-primary-lt:    #ffe4e6;
+  --jura-primary-ring:  rgba(225,29,72,.22);
+  --jura-bg:            #fff1f2;
+  --jura-surface-muted: #ffe4e6;
+}
+
+[data-jura-theme="violet"] {
+  --jura-primary:       #7c3aed;
+  --jura-primary-dk:    #6d28d9;
+  --jura-primary-lt:    #ede9fe;
+  --jura-primary-ring:  rgba(124,58,237,.22);
+  --jura-bg:            #faf5ff;
+  --jura-surface-muted: #ede9fe;
+}
+
+[data-jura-theme="amber"] {
+  --jura-primary:       #d97706;
+  --jura-primary-dk:    #b45309;
+  --jura-primary-lt:    #fef3c7;
+  --jura-primary-ring:  rgba(217,119,6,.22);
+  --jura-bg:            #fffbeb;
+  --jura-surface-muted: #fef3c7;
+}
+
+[data-jura-theme="slate"] {
+  --jura-primary:       #475569;
+  --jura-primary-dk:    #334155;
+  --jura-primary-lt:    #f1f5f9;
+  --jura-primary-ring:  rgba(71,85,105,.18);
+  --jura-bg:            #f8fafc;
+  --jura-surface-muted: #f1f5f9;
+}
+
+/* ----------------------------------------------------------------
+   3. Dark Mode
+   ---------------------------------------------------------------- */
+[data-theme="dark"] {
+  --jura-bg:            #0f172a;
+  --jura-surface:       #1e293b;
+  --jura-surface-2:     #293548;
+  --jura-surface-muted: #1e293b;
+  --jura-text:          #f1f5f9;
+  --jura-text-muted:    #94a3b8;
+  --jura-text-subtle:   #64748b;
+  --jura-border:        #334155;
+  --jura-border-strong: #475569;
+  --jura-shadow-xs:     0 1px 2px rgba(0,0,0,.3);
+  --jura-shadow-sm:     0 1px 3px rgba(0,0,0,.3);
+  --jura-shadow:        0 4px 16px rgba(0,0,0,.3);
+  --jura-shadow-lg:     0 10px 40px rgba(0,0,0,.4);
+}
+
+/* ----------------------------------------------------------------
+   4. Base Reset
+   ---------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--jura-font);
+  font-size: .9375rem;
+  background: var(--jura-bg);
+  color: var(--jura-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,h2,h3,h4,h5,h6 { margin: 0 0 .5em; font-weight: 700; line-height: 1.25; letter-spacing: -.02em; }
+p  { margin: 0 0 1em; }
+ul { margin: 0; padding-left: 1.5em; }
+li { margin-bottom: .3em; }
+a  { color: var(--jura-primary); text-decoration: none; transition: color var(--jura-dur) var(--jura-ease); }
+a:hover { text-decoration: underline; }
+img, svg { display: block; max-width: 100%; }
+button, input, select, textarea { font: inherit; }
+
+/* ----------------------------------------------------------------
+   5. Layout — App Shell
+   ---------------------------------------------------------------- */
+.jura-app { min-height: 100vh; }
+
+.jura-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.jura-sidebar {
+  background: var(--jura-surface);
+  border-right: 1px solid var(--jura-border);
+  padding: 1.25rem .875rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+
+.jura-sidebar-brand {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--jura-text);
+  letter-spacing: -.025em;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .35rem .5rem;
+  margin-bottom: .5rem;
+  text-decoration: none;
+}
+
+.jura-sidebar-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--jura-text-subtle);
+  padding: .85rem .5rem .3rem;
+  display: block;
+}
+
+.jura-sidebar nav { display: grid; gap: .15rem; }
+
+.jura-sidebar a {
+  color: var(--jura-text-muted);
+  padding: .5rem .75rem;
+  border-radius: var(--jura-radius-sm);
+  font-weight: 500;
+  font-size: .875rem;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  transition: background var(--jura-dur) var(--jura-ease),
+              color var(--jura-dur) var(--jura-ease);
+}
+.jura-sidebar a:hover { background: var(--jura-surface-2); color: var(--jura-text); text-decoration: none; }
+.jura-sidebar a.is-active {
+  background: var(--jura-primary-lt);
+  color: var(--jura-primary);
+  font-weight: 600;
+}
+
+/* Main area */
+.jura-main { padding: 2rem; overflow: hidden; }
+
+/* Topbar */
+.jura-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+}
+.jura-topbar-title  { font-size: 1.35rem; font-weight: 700; margin: 0; letter-spacing: -.025em; }
+.jura-topbar-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.jura-mobile-toggle { display: none; }
+
+/* ----------------------------------------------------------------
+   6. Cards
+   ---------------------------------------------------------------- */
+.jura-card {
+  background: var(--jura-surface);
+  border: 1px solid var(--jura-border);
+  border-radius: var(--jura-radius);
+  box-shadow: var(--jura-shadow-sm);
+  padding: 1.25rem;
+}
+
+.jura-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.jura-card-title    { font-size: 1rem; font-weight: 700; margin: 0; }
+.jura-card-subtitle { font-size: .825rem; color: var(--jura-text-muted); margin: .15rem 0 0; }
+
+/* Hoverable */
+.jura-card-hover {
+  cursor: pointer;
+  transition: box-shadow var(--jura-dur) var(--jura-ease),
+              transform var(--jura-dur) var(--jura-ease),
+              border-color var(--jura-dur) var(--jura-ease);
+}
+.jura-card-hover:hover {
+  box-shadow: var(--jura-shadow);
+  border-color: var(--jura-primary);
+  transform: translateY(-2px);
+}
+
+/* Glass */
+.jura-card-glass {
+  background: rgba(255,255,255,.6);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: rgba(255,255,255,.8);
+}
+
+/* Accent left-border variants */
+.jura-card-accent         { border-left: 3px solid var(--jura-primary); }
+.jura-card-accent-success { border-left: 3px solid var(--jura-success); }
+.jura-card-accent-warning { border-left: 3px solid var(--jura-warning); }
+.jura-card-accent-danger  { border-left: 3px solid var(--jura-danger); }
+
+/* Stat card */
+.jura-stat-value { font-size: 2rem; font-weight: 800; line-height: 1; margin: .4rem 0 .2rem; display: block; letter-spacing: -.04em; }
+.jura-stat-label { font-size: .825rem; color: var(--jura-text-muted); }
+/* Legacy compat */
+.jura-stat strong { font-size: 1.65rem; display: block; margin-top: .35rem; }
+
+/* ----------------------------------------------------------------
+   7. Grid & Layout Helpers
+   ---------------------------------------------------------------- */
+.jura-grid   { display: grid; gap: 1rem; }
+.jura-grid-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.jura-grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.jura-grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+
+.jura-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+.jura-section { padding: 2.5rem 0; }
+.jura-divider { height: 1px; background: var(--jura-border); border: none; margin: 1.5rem 0; }
+
+/* Flex utilities */
+.jura-flex        { display: flex; }
+.jura-flex-center { display: flex; align-items: center; justify-content: center; }
+.jura-gap-sm  { gap: .5rem; }
+.jura-gap     { gap: 1rem; }
+.jura-gap-lg  { gap: 1.5rem; }
+
+/* ----------------------------------------------------------------
+   8. Buttons
+   ---------------------------------------------------------------- */
+.jura-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4em;
+  border: 1px solid var(--jura-border);
+  background: var(--jura-surface);
+  color: var(--jura-text);
+  border-radius: var(--jura-radius-sm);
+  padding: .5rem 1rem;
+  cursor: pointer;
+  font: 600 .875rem/1 var(--jura-font);
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background var(--jura-dur) var(--jura-ease),
+    border-color var(--jura-dur) var(--jura-ease),
+    color var(--jura-dur) var(--jura-ease),
+    box-shadow var(--jura-dur) var(--jura-ease),
+    transform 100ms var(--jura-ease);
+}
+.jura-btn:hover { background: var(--jura-surface-2); border-color: var(--jura-border-strong); text-decoration: none; }
+.jura-btn:active { transform: translateY(1px); }
+.jura-btn:focus-visible { outline: 2.5px solid var(--jura-primary-ring); outline-offset: 2px; }
+.jura-btn:disabled,
+.jura-btn[disabled] { opacity: .5; pointer-events: none; }
+
+/* Primary */
+.jura-btn-primary {
+  background: var(--jura-primary);
+  border-color: var(--jura-primary);
+  color: var(--jura-primary-fg);
+  box-shadow: 0 1px 4px var(--jura-primary-ring);
+}
+.jura-btn-primary:hover {
+  background: var(--jura-primary-dk);
+  border-color: var(--jura-primary-dk);
+  box-shadow: 0 4px 14px var(--jura-primary-ring);
+}
+
+/* Secondary */
+.jura-btn-secondary {
+  background: var(--jura-primary-lt);
+  border-color: transparent;
+  color: var(--jura-primary);
+}
+.jura-btn-secondary:hover { filter: brightness(.95); border-color: transparent; }
+
+/* Danger */
+.jura-btn-danger {
+  background: var(--jura-danger-bg);
+  border-color: transparent;
+  color: var(--jura-danger-fg);
+}
+.jura-btn-danger:hover { filter: brightness(.96); }
+
+/* Ghost */
+.jura-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--jura-text-muted);
+}
+.jura-btn-ghost:hover { background: var(--jura-surface-2); border-color: transparent; color: var(--jura-text); }
+
+/* Sizes */
+.jura-btn-sm   { padding: .35rem .7rem; font-size: .8rem; border-radius: 6px; }
+.jura-btn-lg   { padding: .7rem 1.5rem; font-size: 1rem; border-radius: var(--jura-radius); }
+.jura-btn-icon { padding: .5rem; aspect-ratio: 1; }
+
+/* Loading state */
+.jura-btn[data-loading] { pointer-events: none; opacity: .7; }
+.jura-btn[data-loading]::before {
+  content: "";
+  width: .9em; height: .9em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: jura-spin .7s linear infinite;
+}
+
+@keyframes jura-spin { to { transform: rotate(360deg); } }
+
+/* ----------------------------------------------------------------
+   9. Badges
+   ---------------------------------------------------------------- */
+.jura-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3em;
+  padding: .2rem .55rem;
+  border-radius: var(--jura-radius-full);
+  background: var(--jura-surface-2);
+  color: var(--jura-text-muted);
+  font-size: .75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.jura-badge-primary { background: var(--jura-primary-lt); color: var(--jura-primary); }
+.jura-badge-success { background: var(--jura-success-bg); color: var(--jura-success-fg); }
+.jura-badge-warning { background: var(--jura-warning-bg); color: var(--jura-warning-fg); }
+.jura-badge-danger  { background: var(--jura-danger-bg);  color: var(--jura-danger-fg); }
+.jura-badge-info    { background: var(--jura-info-bg);    color: var(--jura-info-fg); }
+
+/* With status dot */
+.jura-badge-dot::before {
+  content: "";
+  display: block;
+  width: .45em; height: .45em;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Outlined */
+.jura-badge-outline {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+/* ----------------------------------------------------------------
+   10. Form Controls
+   ---------------------------------------------------------------- */
+.jura-form-group { display: grid; gap: .4rem; }
+
+label { font-size: .875rem; font-weight: 600; color: var(--jura-text); }
+
+.jura-input,
+.jura-select,
+.jura-textarea {
+  width: 100%;
+  border: 1.5px solid var(--jura-border);
+  border-radius: var(--jura-radius-sm);
+  padding: .55rem .75rem;
+  font: inherit;
+  font-size: .9rem;
+  background: var(--jura-surface);
+  color: var(--jura-text);
+  transition:
+    border-color var(--jura-dur) var(--jura-ease),
+    box-shadow var(--jura-dur) var(--jura-ease);
+}
+.jura-input:focus,
+.jura-select:focus,
+.jura-textarea:focus {
+  outline: none;
+  border-color: var(--jura-primary);
+  box-shadow: 0 0 0 3px var(--jura-primary-ring);
+}
+.jura-input::placeholder,
+.jura-textarea::placeholder { color: var(--jura-text-subtle); }
+
+.jura-textarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: 1.6;
+}
+
+.jura-select {
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .65rem center;
+  background-size: 1rem;
+  padding-right: 2.25rem;
+}
+
+/* Input states */
+.jura-input-sm { padding: .35rem .6rem; font-size: .825rem; }
+.jura-input-error   { border-color: var(--jura-danger); }
+.jura-input-error:focus   { box-shadow: 0 0 0 3px rgba(220,38,38,.18); }
+.jura-input-success { border-color: var(--jura-success); }
+
+/* Helper/error text */
+.jura-form-hint  { font-size: .8rem; color: var(--jura-text-muted); }
+.jura-form-error { font-size: .8rem; color: var(--jura-danger); font-weight: 500; }
+
+/* Toggle switch */
+.jura-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: .9rem;
+}
+.jura-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+.jura-toggle-track {
+  flex-shrink: 0;
+  width: 2.4rem;
+  height: 1.3rem;
+  background: var(--jura-border-strong);
+  border-radius: var(--jura-radius-full);
+  position: relative;
+  transition: background var(--jura-dur) var(--jura-ease);
+}
+.jura-toggle-track::after {
+  content: "";
+  position: absolute;
+  width: .95rem; height: .95rem;
+  border-radius: 50%;
+  background: #fff;
+  top: .175rem; left: .175rem;
+  box-shadow: var(--jura-shadow-xs);
+  transition: transform var(--jura-dur) var(--jura-ease);
+}
+.jura-toggle input:checked + .jura-toggle-track { background: var(--jura-primary); }
+.jura-toggle input:checked + .jura-toggle-track::after { transform: translateX(1.1rem); }
+
+/* Checkbox */
+.jura-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  cursor: pointer;
+  font-size: .9rem;
+  user-select: none;
+}
+.jura-checkbox input[type="checkbox"] {
+  appearance: none;
+  width: 1.05rem; height: 1.05rem;
+  border: 1.5px solid var(--jura-border-strong);
+  border-radius: 4px;
+  background: var(--jura-surface);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--jura-dur) var(--jura-ease),
+    border-color var(--jura-dur) var(--jura-ease);
+  position: relative;
+}
+.jura-checkbox input[type="checkbox"]:checked {
+  background: var(--jura-primary);
+  border-color: var(--jura-primary);
+}
+.jura-checkbox input[type="checkbox"]:checked::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: .22rem; top: .08rem;
+  width: .45rem; height: .25rem;
+  border: 2px solid #fff;
+  border-top: none;
+  border-right: none;
+  transform: rotate(-45deg);
+}
+
+/* Radio */
+.jura-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  cursor: pointer;
+  font-size: .9rem;
+  user-select: none;
+}
+.jura-radio input[type="radio"] {
+  appearance: none;
+  width: 1.05rem; height: 1.05rem;
+  border: 1.5px solid var(--jura-border-strong);
+  border-radius: 50%;
+  background: var(--jura-surface);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition:
+    background var(--jura-dur) var(--jura-ease),
+    border-color var(--jura-dur) var(--jura-ease);
+}
+.jura-radio input[type="radio"]:checked { border-color: var(--jura-primary); }
+.jura-radio input[type="radio"]:checked::after {
+  content: "";
+  display: block;
+  position: absolute;
+  width: .45rem; height: .45rem;
+  border-radius: 50%;
+  background: var(--jura-primary);
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* ----------------------------------------------------------------
+   11. Table
+   ---------------------------------------------------------------- */
+.jura-table-wrap { overflow-x: auto; }
+.jura-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.jura-table th,
+.jura-table td {
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--jura-border);
+  text-align: left;
+}
+.jura-table th {
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--jura-text-muted);
+  background: var(--jura-surface-2);
+}
+.jura-table tbody tr { transition: background var(--jura-dur) var(--jura-ease); }
+.jura-table tbody tr:hover { background: var(--jura-surface-2); }
+.jura-table tbody tr:last-child td { border-bottom: none; }
+
+/* Striped */
+.jura-table-striped tbody tr:nth-child(even) { background: var(--jura-surface-2); }
+
+/* Compact */
+.jura-table-compact th,
+.jura-table-compact td { padding: .45rem .75rem; font-size: .85rem; }
+
+/* ----------------------------------------------------------------
+   12. Alerts
+   ---------------------------------------------------------------- */
+.jura-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .85rem 1rem;
+  border-radius: var(--jura-radius-sm);
+  border: 1px solid var(--jura-border);
+  background: var(--jura-surface-2);
+  font-size: .9rem;
+  line-height: 1.5;
+}
+.jura-alert-icon { flex-shrink: 0; margin-top: .05rem; }
+
+.jura-alert-success { background: var(--jura-success-bg); border-color: rgba(5,150,105,.25);  color: var(--jura-success-fg); }
+.jura-alert-warning { background: var(--jura-warning-bg); border-color: rgba(217,119,6,.25);  color: var(--jura-warning-fg); }
+.jura-alert-danger  { background: var(--jura-danger-bg);  border-color: rgba(220,38,38,.25);  color: var(--jura-danger-fg); }
+.jura-alert-info    { background: var(--jura-info-bg);    border-color: rgba(8,145,178,.25);   color: var(--jura-info-fg); }
+
+/* ----------------------------------------------------------------
+   13. Tabs
+   ---------------------------------------------------------------- */
+.jura-tabs {
+  display: flex;
+  gap: .2rem;
+  border-bottom: 1.5px solid var(--jura-border);
+  margin-bottom: 1.25rem;
+}
+
+.jura-tab {
+  border: 0;
+  background: transparent;
+  padding: .55rem .9rem;
+  cursor: pointer;
+  font: 600 .875rem/1 var(--jura-font);
+  color: var(--jura-text-muted);
+  position: relative;
+  border-radius: var(--jura-radius-sm) var(--jura-radius-sm) 0 0;
+  transition: color var(--jura-dur) var(--jura-ease);
+}
+.jura-tab:hover { color: var(--jura-text); }
+.jura-tab.is-active { color: var(--jura-primary); }
+.jura-tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1.5px;
+  height: 2px;
+  background: var(--jura-primary);
+  border-radius: 2px 2px 0 0;
+}
+
+.jura-tab-panel { display: none; }
+.jura-tab-panel.is-active { display: block; }
+
+/* Pill / segmented tabs */
+.jura-tabs-pill {
+  background: var(--jura-surface-2);
+  padding: .25rem;
+  border-radius: var(--jura-radius);
+  border: none;
+  gap: .2rem;
+  width: fit-content;
+  margin-bottom: 1.25rem;
+}
+.jura-tabs-pill .jura-tab {
+  border-radius: var(--jura-radius-sm);
+  font-size: .85rem;
+  padding: .4rem .9rem;
+  color: var(--jura-text-muted);
+}
+.jura-tabs-pill .jura-tab.is-active {
+  background: var(--jura-surface);
+  color: var(--jura-text);
+  box-shadow: var(--jura-shadow-xs);
+}
+.jura-tabs-pill .jura-tab.is-active::after { display: none; }
+
+/* ----------------------------------------------------------------
+   14. Progress
+   ---------------------------------------------------------------- */
+.jura-progress {
+  height: .45rem;
+  border-radius: var(--jura-radius-full);
+  background: var(--jura-surface-2);
+  overflow: hidden;
+}
+.jura-progress-bar {
+  height: 100%;
+  border-radius: var(--jura-radius-full);
+  background: var(--jura-primary);
+  transition: width .4s var(--jura-ease);
+}
+.jura-progress-sm { height: .25rem; }
+.jura-progress-lg { height: .75rem; }
+
+.jura-progress-success .jura-progress-bar { background: var(--jura-success); }
+.jura-progress-warning .jura-progress-bar { background: var(--jura-warning); }
+.jura-progress-danger  .jura-progress-bar { background: var(--jura-danger); }
+
+/* ----------------------------------------------------------------
+   15. Spinner
+   ---------------------------------------------------------------- */
+.jura-spinner {
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2.5px solid var(--jura-border);
+  border-top-color: var(--jura-primary);
+  border-radius: 50%;
+  animation: jura-spin .7s linear infinite;
+  flex-shrink: 0;
+}
+.jura-spinner-sm { width: .9rem;  height: .9rem;  border-width: 2px; }
+.jura-spinner-lg { width: 2rem;   height: 2rem;   border-width: 3px; }
+
+/* ----------------------------------------------------------------
+   16. Avatar
+   ---------------------------------------------------------------- */
+.jura-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--jura-primary-lt);
+  color: var(--jura-primary);
+  font-size: .78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  overflow: hidden;
+  letter-spacing: 0;
+}
+.jura-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.jura-avatar-sm  { width: 1.75rem; height: 1.75rem; font-size: .7rem; }
+.jura-avatar-lg  { width: 3.25rem; height: 3.25rem; font-size: 1.1rem; }
+.jura-avatar-xl  { width: 4.5rem;  height: 4.5rem;  font-size: 1.5rem; }
+
+.jura-avatar-group { display: flex; }
+.jura-avatar-group .jura-avatar {
+  border: 2.5px solid var(--jura-surface);
+  margin-left: -.65rem;
+}
+.jura-avatar-group .jura-avatar:first-child { margin-left: 0; }
+
+/* ----------------------------------------------------------------
+   17. Dropdown
+   ---------------------------------------------------------------- */
+.jura-dropdown { position: relative; display: inline-flex; }
+
+.jura-dropdown-menu {
+  position: absolute;
+  top: calc(100% + .4rem);
+  right: 0;
+  z-index: 50;
+  min-width: 11rem;
+  background: var(--jura-surface);
+  border: 1px solid var(--jura-border);
+  border-radius: var(--jura-radius);
+  box-shadow: var(--jura-shadow);
+  padding: .35rem;
+  display: none;
+}
+.jura-dropdown-menu.is-open { display: block; }
+
+.jura-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .75rem;
+  border-radius: var(--jura-radius-sm);
+  color: var(--jura-text);
+  font-size: .875rem;
+  cursor: pointer;
+  transition: background var(--jura-dur) var(--jura-ease);
+  text-decoration: none;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.jura-dropdown-item:hover { background: var(--jura-surface-2); text-decoration: none; }
+.jura-dropdown-item-danger { color: var(--jura-danger-fg); }
+.jura-dropdown-item-danger:hover { background: var(--jura-danger-bg); }
+.jura-dropdown-divider { height: 1px; background: var(--jura-border); margin: .35rem 0; }
+
+/* ----------------------------------------------------------------
+   18. Modal
+   ---------------------------------------------------------------- */
+.jura-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15,23,42,.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--jura-dur) var(--jura-ease);
+}
+.jura-modal-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+.jura-modal {
+  background: var(--jura-surface);
+  border-radius: var(--jura-radius-lg);
+  box-shadow: var(--jura-shadow-lg);
+  width: 100%;
+  max-width: 32rem;
+  padding: 1.75rem;
+  transform: translateY(14px) scale(.98);
+  transition: transform .2s var(--jura-ease);
+}
+.jura-modal-backdrop.is-open .jura-modal { transform: translateY(0) scale(1); }
+
+.jura-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.jura-modal-title  { font-size: 1.1rem; font-weight: 700; margin: 0; }
+.jura-modal-footer { margin-top: 1.5rem; display: flex; gap: .5rem; justify-content: flex-end; }
+
+/* ----------------------------------------------------------------
+   19. Empty State
+   ---------------------------------------------------------------- */
+.jura-empty {
+  border: 1.5px dashed var(--jura-border);
+  border-radius: var(--jura-radius);
+  padding: 2.5rem 1.5rem;
+  color: var(--jura-text-muted);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .75rem;
+}
+.jura-empty-icon  { color: var(--jura-text-subtle); }
+.jura-empty-title { font-size: 1rem; font-weight: 600; color: var(--jura-text); margin: 0; }
+.jura-empty-desc  { font-size: .875rem; margin: 0; max-width: 28rem; }
+
+/* ----------------------------------------------------------------
+   20. Skeleton Loader
+   ---------------------------------------------------------------- */
+@keyframes jura-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.jura-skeleton {
+  background: linear-gradient(90deg, var(--jura-surface-2) 25%, var(--jura-border) 50%, var(--jura-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: jura-shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--jura-radius-sm);
+}
+
+/* ----------------------------------------------------------------
+   21. Responsive breakpoints
+   ---------------------------------------------------------------- */
+@media (max-width: 960px) {
+  .jura-layout { grid-template-columns: 1fr; }
+
+  .jura-sidebar {
+    position: fixed;
+    left: 0; top: 0;
+    transform: translateX(-100%);
+    transition: transform .2s var(--jura-ease);
+    z-index: 30;
+    width: min(280px, 85vw);
+    height: 100dvh;
+    box-shadow: var(--jura-shadow-lg);
+  }
+  .jura-layout.sidebar-open .jura-sidebar { transform: translateX(0); }
+  .jura-mobile-toggle { display: inline-flex; }
+  .jura-main { padding: 1.25rem 1rem; }
+
+  .jura-grid-2,
+  .jura-grid-3,
+  .jura-grid-4,
+  .jura-hero { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .jura-card { padding: 1rem; }
+  .jura-section { padding: 1.5rem 0; }
+}

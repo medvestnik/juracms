@@ -1,9 +1,1 @@
-.simple-js-editor {
-  min-height: 320px;
-  border: 1px solid #cfd6e4;
-  border-radius: 8px;
-  padding: 12px;
-  font-family: inherit;
-  line-height: 1.5;
-  background: #fff;
-}
+.sje-root,.jse-root{--sje-bg: #fff;--sje-fg: #111827;--sje-border: #d1d5db;--sje-accent: #2563eb;color:var(--sje-fg);font-family:Inter,Arial,sans-serif}.sje-toolbar,.jse-toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--sje-border);background:var(--sje-bg)}.sje-btn,.sje-select,.jse-btn,.jse-select{border:1px solid var(--sje-border);background:#fff;padding:4px 8px}.sje-btn:hover{border-color:var(--sje-accent)}.sje-toolbar button.is-active{outline:2px solid #999}.sje-toolbar button:disabled,.sje-toolbar select:disabled{opacity:.5;cursor:not-allowed}.sje-editor,.jse-editor{min-height:220px;border:1px solid var(--sje-border);border-top:0;padding:12px;background:var(--sje-bg)}.sje-editor:empty:before{content:attr(data-placeholder);color:#9ca3af}.sje-code,.jse-code{width:100%;min-height:220px;border:1px solid var(--sje-border);border-top:0;padding:12px;font-family:monospace}.sje-separator{width:1px;background:var(--sje-border);margin:0 4px}

@@ -6,6 +6,21 @@ if (!defined('BASE_PATH')) {
     define('BASE_PATH', __DIR__ . '/..');
 }
 
+if (PHP_SAPI !== 'cli') {
+    // display_errors stays whatever the host has it set to (should be off in
+    // production) — this only makes sure errors/warnings/fatals are also
+    // captured in the project's own logs/ folder, since on managed hosting
+    // the webserver's own error log often isn't reachable by the site owner.
+    $logDir = BASE_PATH . '/logs';
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0775, true);
+    }
+    if (is_dir($logDir) && is_writable($logDir)) {
+        ini_set('log_errors', '1');
+        ini_set('error_log', $logDir . '/php-error.log');
+    }
+}
+
 if (!class_exists(App\Core\View::class)) {
     spl_autoload_register(static function (string $class): void {
         $prefix = 'App\\';
