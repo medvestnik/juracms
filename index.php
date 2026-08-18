@@ -997,12 +997,39 @@ if (str_starts_with($path, '/admin')) {
             $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
             $status = (string) ($_POST['status'] ?? 'draft');
             $publishedAt = !empty($_POST['published_at']) ? $_POST['published_at'] : ($status === 'published' ? date('Y-m-d H:i:s') : null);
-            $pdo->prepare('INSERT INTO ' . jura_table('posts') . ' (slug,title,excerpt,content,status,meta_title,meta_description,published_at) VALUES (?,?,?,?,?,?,?,?)')
-                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt]);
+            [, $defaultLocale] = active_locales($pdo);
+            $pdo->prepare('INSERT INTO ' . jura_table('posts') . ' (slug,title,excerpt,content,status,meta_title,meta_description,published_at,locale) VALUES (?,?,?,?,?,?,?,?,?)')
+                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt, $defaultLocale]);
+            $newPostId = (int) $pdo->lastInsertId();
+            save_route($pdo, '/blog/' . $slug, 'post', $newPostId);
             redirect('/admin/posts');
         }
         view_admin('post-edit', ['title' => 'Нова публікація', 'post' => []]);
         exit;
+    }
+
+    if (preg_match('#^/admin/posts/(\d+)/translate$#', $path, $matches) && $method === 'POST') {
+        $sourceId = (int) $matches[1];
+        $locale = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($_POST['locale'] ?? '')));
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . ' WHERE id=?');
+        $stmt->execute([$sourceId]);
+        $source = $stmt->fetch();
+        if ($source && $locale !== '') {
+            $rootId = translation_root_id($source);
+            $existing = $pdo->prepare('SELECT id FROM ' . jura_table('posts') . ' WHERE (id=? OR translation_of=?) AND locale=?');
+            $existing->execute([$rootId, $rootId, $locale]);
+            $newId = (int) $existing->fetchColumn();
+            if (!$newId) {
+                $ins = $pdo->prepare('INSERT INTO ' . jura_table('posts') . ' (slug,title,excerpt,content,status,meta_title,meta_description,locale,translation_of) VALUES (?,?,?,?,?,?,?,?,?)');
+                $ins->execute([$source['slug'], $source['title'], $source['excerpt'], '', 'draft', '', '', $locale, $rootId]);
+                $newId = (int) $pdo->lastInsertId();
+                [, $defaultLocale] = active_locales($pdo);
+                $routePrefix = $locale !== $defaultLocale ? '/' . $locale : '';
+                save_route($pdo, $routePrefix . '/blog/' . $source['slug'], 'post', $newId);
+            }
+            redirect('/admin/posts/' . $newId . '/edit');
+        }
+        redirect('/admin/posts/' . $sourceId . '/edit');
     }
 
     if (preg_match('#^/admin/posts/(\d+)/edit$#', $path, $matches)) {
@@ -1017,12 +1044,22 @@ if (str_starts_with($path, '/admin')) {
             $featuredImage = $post['featured_image'] ?? null;
             $pdo->prepare('UPDATE ' . jura_table('posts') . ' SET slug=?,title=?,excerpt=?,content=?,status=?,meta_title=?,meta_description=?,published_at=?,featured_image=?,updated_at=NOW() WHERE id=?')
                 ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt, $featuredImage, $id]);
+            [, $defaultLocale] = active_locales($pdo);
+            $postLocale = (string) ($post['locale'] ?? $defaultLocale);
+            $routePrefix = $postLocale !== '' && $postLocale !== $defaultLocale ? '/' . $postLocale : '';
+            $pdo->prepare('DELETE FROM ' . jura_table('routes') . " WHERE entity_type='post' AND entity_id=?")->execute([$id]);
+            save_route($pdo, $routePrefix . '/blog/' . $slug, 'post', $id);
             redirect('/admin/posts');
         }
         if ($post) {
             $post['content'] = str_replace(['src="/userfiles/', "src='/userfiles/"], ['src="/public/userfiles/', "src='/public/userfiles/"], $post['content'] ?? '');
         }
-        view_admin('post-edit', ['title' => 'Редагувати публікацію', 'post' => $post]);
+        view_admin('post-edit', [
+            'title' => 'Редагувати публікацію',
+            'post' => $post,
+            'translations' => $post ? entity_translations($pdo, 'posts', $post) : [],
+            'all_locales' => $post ? $pdo->query('SELECT code,name,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll() : [],
+        ]);
         exit;
     }
 
