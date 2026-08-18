@@ -655,6 +655,47 @@ if (str_starts_with($path, '/admin')) {
         exit;
     }
 
+    if ($path === '/admin/locales') {
+        if ($method === 'POST') {
+            $action = (string) ($_POST['action'] ?? '');
+            if ($action === 'create') {
+                $code = strtolower(trim((string) ($_POST['code'] ?? '')));
+                if ($code !== '') {
+                    $pdo->prepare('INSERT IGNORE INTO ' . jura_table('locales') . ' (code,name,native_name,sort_order) VALUES (?,?,?,?)')
+                        ->execute([$code, trim((string) ($_POST['name'] ?? '')), trim((string) ($_POST['native_name'] ?? '')), (int) ($_POST['sort_order'] ?? 0)]);
+                }
+            } elseif ($action === 'update') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET name=?,native_name=?,sort_order=?,is_active=? WHERE id=?')
+                    ->execute([trim((string) ($_POST['name'] ?? '')), trim((string) ($_POST['native_name'] ?? '')), (int) ($_POST['sort_order'] ?? 0), isset($_POST['is_active']) ? 1 : 0, $id]);
+            } elseif ($action === 'set_default') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET is_default=0')->execute();
+                $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET is_default=1,is_active=1 WHERE id=?')->execute([$id]);
+                $code = $pdo->prepare('SELECT code FROM ' . jura_table('locales') . ' WHERE id=?');
+                $code->execute([$id]);
+                if ($c = $code->fetchColumn()) {
+                    save_setting($pdo, 'default_locale', (string) $c, 'localization');
+                }
+            } elseif ($action === 'delete') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $row = $pdo->prepare('SELECT is_default FROM ' . jura_table('locales') . ' WHERE id=?');
+                $row->execute([$id]);
+                if ((int) $row->fetchColumn() !== 1) {
+                    $pdo->prepare('DELETE FROM ' . jura_table('locales') . ' WHERE id=?')->execute([$id]);
+                } else {
+                    session_flash('error', 'Не можна видалити мову за замовчуванням.');
+                }
+            }
+            [$activeCodes] = active_locales($pdo);
+            save_setting($pdo, 'active_locales', implode(',', $activeCodes), 'localization');
+            redirect('/admin/locales');
+        }
+        $locales = $pdo->query('SELECT * FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('locales', ['title' => 'Мови сайту', 'locales' => $locales, 'flash_error' => session_flash('error')]);
+        exit;
+    }
+
     if (ModuleLoader::hookFirst('handle_admin', $path, $method, $pdo)) {
         exit;
     }
