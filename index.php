@@ -51,7 +51,7 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
-const CMS_SCHEMA_VERSION = '1';
+const CMS_SCHEMA_VERSION = '2';
 
 function ensure_cms_schema(PDO $pdo): void
 {
@@ -90,6 +90,10 @@ function ensure_cms_schema(PDO $pdo): void
         ['redirects', 'last_hit_at', 'TIMESTAMP NULL'],
         ['media_files', 'folder', 'VARCHAR(191) NULL'],
         ['users', 'role', "VARCHAR(40) NOT NULL DEFAULT 'admin'"],
+        ['pages', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
+        ['pages', 'translation_of', 'INT UNSIGNED NULL'],
+        ['posts', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
+        ['posts', 'translation_of', 'INT UNSIGNED NULL'],
     ] as [$table, $column, $definition]) {
         $tableName = str_replace('`', '', jura_table($table));
         $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}` LIKE " . $pdo->quote($column));
@@ -141,6 +145,12 @@ function ensure_cms_schema(PDO $pdo): void
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('locales') . ' (code,name,native_name,is_default,sort_order) VALUES (?,?,?,?,?)')
             ->execute($locale);
     }
+    // Existing pages/posts predate the locale column — backfill them onto
+    // the site's default locale rather than leaving it blank, so they keep
+    // rendering exactly as before until an admin adds real translations.
+    $defaultLocale = (string) setting_value($pdo, 'default_locale', 'uk');
+    $pdo->prepare('UPDATE ' . jura_table('pages') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
+    $pdo->prepare('UPDATE ' . jura_table('posts') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
 
     $dir = dirname($marker);
     if (!is_dir($dir)) {
@@ -150,11 +160,32 @@ function ensure_cms_schema(PDO $pdo): void
     $ensuredThisRequest = true;
 }
 
-function current_locale(PDO $pdo, string $path): array
+/** Active locale codes ordered for display, and the default locale code.
+ * jura_locales is the source of truth; the default_locale/active_locales
+ * settings are kept in sync (by the /admin/locales page) purely as a
+ * cheap fallback in case that table is ever empty. */
+function active_locales(PDO $pdo): array
 {
+    try {
+        $rows = $pdo->query('SELECT code,is_default FROM ' . jura_table('locales') . ' WHERE is_active=1 ORDER BY sort_order,id')->fetchAll();
+    } catch (\Throwable) {
+        $rows = [];
+    }
+    if ($rows) {
+        $codes = array_column($rows, 'code');
+        $defaultRow = current(array_filter($rows, fn($r) => (int) $r['is_default'] === 1));
+        $default = $defaultRow ? (string) $defaultRow['code'] : (string) $codes[0];
+        return [$codes, $default];
+    }
     $settings = cms_settings($pdo);
     $default = (string) ($settings['default_locale'] ?? 'uk');
-    $active = array_filter(array_map('trim', explode(',', (string) ($settings['active_locales'] ?? $default))));
+    $active = array_values(array_filter(array_map('trim', explode(',', (string) ($settings['active_locales'] ?? $default)))));
+    return [$active ?: [$default], $default];
+}
+
+function current_locale(PDO $pdo, string $path): array
+{
+    [$active, $default] = active_locales($pdo);
     $segments = array_values(array_filter(explode('/', trim($path, '/'))));
     $prefix = $segments[0] ?? '';
     if (in_array($prefix, $active, true)) {
@@ -178,6 +209,35 @@ function frontend_route(PDO $pdo, string $path): ?array
         }
     }
     return null;
+}
+
+/**
+ * All translations of a page/post, keyed by locale code — including the
+ * row itself. Used to render a language switcher and to drive the admin
+ * "Translations" panel. $table is 'pages' or 'posts'; $row must have
+ * id, locale, translation_of.
+ */
+function entity_translations(PDO $pdo, string $table, array $row): array
+{
+    $rootId = (int) ($row['translation_of'] ?: $row['id']);
+    $entityType = rtrim($table, 's'); // 'pages' -> 'page', 'posts' -> 'post'
+    $stmt = $pdo->prepare(
+        'SELECT e.id,e.locale,e.title,r.path route_path FROM ' . jura_table($table) . ' e '
+        . 'LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type=? AND r.entity_id=e.id "
+        . 'WHERE e.id=? OR e.translation_of=?'
+    );
+    $stmt->execute([$entityType, $rootId, $rootId]);
+    $out = [];
+    foreach ($stmt->fetchAll() as $t) {
+        $out[(string) $t['locale']] = $t;
+    }
+    return $out;
+}
+
+/** The default-locale-most page/post id a translation belongs to (itself if it has no translation_of). */
+function translation_root_id(array $row): int
+{
+    return (int) ($row['translation_of'] ?: $row['id']);
 }
 
 function find_redirect(PDO $pdo, string $path): ?array
@@ -1031,21 +1091,27 @@ if ($route) {
         if ($page) {
             $settings = cms_settings($pdo);
             $page['content'] = ModuleLoader::hookFilter('filter_page_content', $page['content'] ?? '', $settings);
+            $locale = (string) ($route['locale'] ?? $page['locale'] ?? $settings['default_locale'] ?? 'uk');
+            $translations = entity_translations($pdo, 'pages', $page);
+            $common = ['locale' => $locale, 'translations' => $translations];
             if (($page['template'] ?? '') === 'blog') {
                 $perPage = max(1, (int)($settings['blog_per_page'] ?? 12));
-                $totalPosts = (int)$pdo->query('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published'")->fetchColumn();
+                $totalPostsStmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published' AND locale=?");
+                $totalPostsStmt->execute([$locale]);
+                $totalPosts = (int) $totalPostsStmt->fetchColumn();
                 $totalPages = max(1, (int)ceil($totalPosts / $perPage));
                 $currentPage = max(1, min($totalPages, (int)($_GET['page'] ?? 1)));
                 $offset = ($currentPage - 1) * $perPage;
-                $posts = $pdo->query('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}")->fetchAll();
-                view_frontend('blog', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts, 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]]);
+                $posts = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND locale=? ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
+                $posts->execute([$locale]);
+                view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts->fetchAll(), 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common));
             } elseif (($page['template'] ?? '') === 'contacts') {
-                view_frontend('contacts', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
+                view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
             } elseif (($page['template'] ?? '') === 'home') {
                 $homeExtra = ModuleLoader::hookCollect('home_data', $pdo);
-                view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $homeExtra));
+                view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra));
             } else {
-                view_frontend('page', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
+                view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
             }
             exit;
         }
@@ -1055,7 +1121,8 @@ if ($route) {
         $stmt->execute([(int) $route['entity_id']]);
         $post = $stmt->fetch();
         if ($post) {
-            view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo)]);
+            $locale = (string) ($route['locale'] ?? $post['locale'] ?? 'uk');
+            view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo), 'locale' => $locale, 'translations' => entity_translations($pdo, 'posts', $post)]);
             exit;
         }
     }
