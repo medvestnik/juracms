@@ -6,9 +6,32 @@ $headerItems = isset($pdo) ? frontend_menu_items($pdo, $settings['menu_header'] 
 $footerItems = isset($pdo) ? frontend_menu_items($pdo, $settings['menu_footer'] ?? 'main') : [];
 $current = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $metaDescription = $meta_description ?? '';
+
+// Language switcher: only shown once more than one locale is active.
+// Uses the current view's translation map when available (so it links to
+// the actual translated page/post), falling back to that locale's home
+// page for views that don't carry $translations (e.g. 404, module pages).
+$siteLocales = [];
+$currentLocaleCode = $locale ?? ($settings['default_locale'] ?? 'uk');
+if (isset($pdo)) {
+    try {
+        $localeRows = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' WHERE is_active=1 ORDER BY sort_order,id')->fetchAll();
+    } catch (\Throwable) {
+        $localeRows = [];
+    }
+    if (count($localeRows) > 1) {
+        [, $defaultLocaleCode] = active_locales($pdo);
+        $translationMap = $translations ?? [];
+        foreach ($localeRows as $lr) {
+            $code = (string) $lr['code'];
+            $url = $translationMap[$code]['route_path'] ?? ($code === $defaultLocaleCode ? '/' : '/' . $code);
+            $siteLocales[] = ['code' => $code, 'label' => (string) $lr['native_name'], 'url' => $url, 'current' => $code === $currentLocaleCode];
+        }
+    }
+}
 ?>
 <!doctype html>
-<html lang="<?= e($settings['default_locale'] ?? 'uk') ?>">
+<html lang="<?= e($currentLocaleCode) ?>">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -50,6 +73,18 @@ $metaDescription = $meta_description ?? '';
       </nav>
       <?php endif; ?>
       <div class="site-header__right">
+        <?php if (!empty($siteLocales)): ?>
+        <div class="lang-switcher" style="position:relative">
+          <button type="button" class="lang-switcher__btn" id="lang-switcher-btn" style="background:none;border:1px solid var(--site-border,#e2e8f0);border-radius:6px;padding:.35rem .6rem;font-size:.85rem;cursor:pointer;text-transform:uppercase" aria-label="Мова">
+            <?= e($currentLocaleCode) ?> ▾
+          </button>
+          <div id="lang-switcher-drop" hidden style="position:absolute;right:0;top:calc(100% + 4px);background:var(--site-surface,#fff);border:1px solid var(--site-border,#e2e8f0);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.1);min-width:140px;z-index:200;padding:4px">
+            <?php foreach ($siteLocales as $sl): ?>
+            <a href="<?= e($sl['url']) ?>" style="display:block;padding:6px 10px;border-radius:6px;font-size:.85rem;text-decoration:none;color:inherit<?= $sl['current'] ? ';font-weight:700' : '' ?>"><?= e($sl['label']) ?></a>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <?php endif; ?>
         <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Перемкнути тему">
           <span class="icon-light">☀️</span><span class="icon-dark">🌙</span>
         </button>
@@ -98,6 +133,13 @@ $metaDescription = $meta_description ?? '';
     var open = nav.classList.toggle('is-open');
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
+})();
+(function(){
+  var btn = document.getElementById('lang-switcher-btn');
+  var drop = document.getElementById('lang-switcher-drop');
+  if (!btn || !drop) return;
+  btn.addEventListener('click', function(e){ e.stopPropagation(); drop.hidden = !drop.hidden; });
+  document.addEventListener('click', function(){ drop.hidden = true; });
 })();
 (function(){
   var btn = document.getElementById('theme-toggle');
