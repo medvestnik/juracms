@@ -581,6 +581,10 @@ if (str_starts_with($path, '/admin')) {
                 ModuleLoader::install($slug, $pdo);
             } elseif ($slug && ($_POST['action'] ?? '') === 'uninstall') {
                 ModuleLoader::uninstall($slug, $pdo);
+            } elseif ($slug && ($_POST['action'] ?? '') === 'enable') {
+                ModuleLoader::toggle($slug, true, $pdo);
+            } elseif ($slug && ($_POST['action'] ?? '') === 'disable') {
+                ModuleLoader::toggle($slug, false, $pdo);
             }
             redirect('/admin/modules');
         }

@@ -16,8 +16,24 @@ final class ModuleLoader
             slug VARCHAR(80) UNIQUE NOT NULL,
             name VARCHAR(191) NOT NULL,
             version VARCHAR(40) NOT NULL DEFAULT '1.0.0',
+            enabled TINYINT(1) NOT NULL DEFAULT 1,
             installed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Older installs created this table before the `enabled` column
+        // existed — add it the same idempotent, concurrency-safe way the
+        // rest of the schema is patched (see ensure_cms_schema()).
+        $tableName = str_replace('`', '', \jura_table('modules'));
+        $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}` LIKE 'enabled'");
+        if (!$stmt->fetch()) {
+            try {
+                $pdo->exec("ALTER TABLE `{$tableName}` ADD `enabled` TINYINT(1) NOT NULL DEFAULT 1");
+            } catch (\PDOException $e) {
+                if ($e->getCode() !== '42S21') {
+                    throw $e;
+                }
+            }
+        }
     }
 
     // ── Registry ────────────────────────────────────────────────────────────
@@ -32,10 +48,13 @@ final class ModuleLoader
     }
 
     // ── Load installed modules ──────────────────────────────────────────────
+    /** Loads only modules that are both installed and enabled — a disabled
+     * module stays installed (data intact) but its hooks/nav/routes never
+     * fire, same effect as if it were never installed. */
     public static function loadInstalled(\PDO $pdo): void
     {
         try {
-            $slugs = $pdo->query('SELECT slug FROM ' . \jura_table('modules'))->fetchAll(\PDO::FETCH_COLUMN);
+            $slugs = $pdo->query('SELECT slug FROM ' . \jura_table('modules') . ' WHERE enabled=1')->fetchAll(\PDO::FETCH_COLUMN);
         } catch (\Throwable) {
             return;
         }
@@ -108,16 +127,27 @@ final class ModuleLoader
     public static function available(\PDO $pdo): array
     {
         try {
-            $installed = $pdo->query('SELECT slug FROM ' . \jura_table('modules'))->fetchAll(\PDO::FETCH_COLUMN);
+            $rows = $pdo->query('SELECT slug, enabled FROM ' . \jura_table('modules'))->fetchAll(\PDO::FETCH_ASSOC);
         } catch (\Throwable) {
-            $installed = [];
+            $rows = [];
+        }
+        $installed = [];
+        foreach ($rows as $row) {
+            $installed[$row['slug']] = (bool) $row['enabled'];
         }
         $modules = [];
         foreach (self::availableManifests() as $manifest) {
-            $manifest['installed'] = in_array($manifest['slug'], $installed, true);
+            $manifest['installed'] = array_key_exists($manifest['slug'], $installed);
+            $manifest['enabled'] = $manifest['installed'] ? $installed[$manifest['slug']] : false;
             $modules[] = $manifest;
         }
         return $modules;
+    }
+
+    public static function toggle(string $slug, bool $enabled, \PDO $pdo): void
+    {
+        $pdo->prepare('UPDATE ' . \jura_table('modules') . ' SET enabled=? WHERE slug=?')
+            ->execute([$enabled ? 1 : 0, $slug]);
     }
 
     public static function install(string $slug, \PDO $pdo): void

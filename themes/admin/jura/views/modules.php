@@ -16,8 +16,10 @@
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.2rem">
           <strong style="font-size:1rem"><?= e($mod['name']) ?></strong>
           <span style="font-size:.75rem;color:#94a3b8">v<?= e($mod['version'] ?? '1.0.0') ?></span>
-          <?php if ($mod['installed']): ?>
-          <span style="font-size:.72rem;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:20px;padding:.1rem .5rem">✓ Встановлено</span>
+          <?php if ($mod['installed'] && $mod['enabled']): ?>
+          <span style="font-size:.72rem;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:20px;padding:.1rem .5rem">✓ Увімкнено</span>
+          <?php elseif ($mod['installed']): ?>
+          <span style="font-size:.72rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:20px;padding:.1rem .5rem">⏸ Вимкнено</span>
           <?php else: ?>
           <span style="font-size:.72rem;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;border-radius:20px;padding:.1rem .5rem">Не встановлено</span>
           <?php endif; ?>
@@ -32,6 +34,21 @@
     </div>
     <div style="display:flex;gap:.5rem;margin-top:auto">
       <?php if ($mod['installed']): ?>
+      <form method="post" style="margin:0">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="slug" value="<?= e($mod['slug']) ?>">
+        <?php if ($mod['enabled']): ?>
+        <input type="hidden" name="action" value="disable">
+        <button type="submit" class="jura-btn jura-btn-secondary" style="padding:.35rem .8rem;font-size:.83rem">
+          Вимкнути
+        </button>
+        <?php else: ?>
+        <input type="hidden" name="action" value="enable">
+        <button type="submit" class="jura-btn jura-btn-primary" style="padding:.35rem .8rem;font-size:.83rem">
+          Увімкнути
+        </button>
+        <?php endif; ?>
+      </form>
       <form method="post" style="margin:0">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="slug" value="<?= e($mod['slug']) ?>">

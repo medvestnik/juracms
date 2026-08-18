@@ -3,9 +3,9 @@ use App\Core\View;
 use App\Core\ModuleLoader;
 $current = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $nav = array_merge(
-  ['Основне' => ['/admin'=>'Дашборд','/admin/settings'=>'Налаштування','/admin/pages'=>'Сторінки','/admin/posts'=>'Публікації','/admin/menus'=>'Меню','/admin/media'=>'Медіа','/admin/redirects'=>'Редіректи']],
+  ['Основне' => ['/admin'=>'Дашборд','/admin/pages'=>'Сторінки','/admin/posts'=>'Публікації','/admin/menus'=>'Меню','/admin/media'=>'Медіа','/admin/redirects'=>'Редіректи']],
   ModuleLoader::getAdminNav(),
-  ['Система' => ['/admin/users'=>'Користувачі','/admin/modules'=>'Модулі','/admin/themes'=>'Шаблони','/admin/maintenance'=>'Обслуговування','/admin/updates'=>'Оновлення']]
+  ['Система' => ['/admin/settings'=>'Налаштування','/admin/users'=>'Користувачі','/admin/modules'=>'Модулі','/admin/themes'=>'Шаблони','/admin/maintenance'=>'Обслуговування','/admin/updates'=>'Оновлення']]
 );
 global $pdo;
 $_juraTheme = 'indigo';
