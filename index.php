@@ -540,8 +540,9 @@ if (str_starts_with($path, '/admin')) {
         if ($route === '/home') {
             $route = '/';
         }
-        $stmt = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,canonical_path,og_title,og_description,sort_order,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?="published" THEN NOW() ELSE NULL END)');
-        $stmt->execute([(int) $_SESSION['admin_user_id'], $_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $status, $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $status]);
+        [, $defaultLocale] = active_locales($pdo);
+        $stmt = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,canonical_path,og_title,og_description,sort_order,locale,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?="published" THEN NOW() ELSE NULL END)');
+        $stmt->execute([(int) $_SESSION['admin_user_id'], $_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $status, $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $defaultLocale, $status]);
         $id = (int) $pdo->lastInsertId();
         save_route($pdo, $route, 'page', $id);
         redirect('/admin/pages');
@@ -549,8 +550,37 @@ if (str_starts_with($path, '/admin')) {
     if (preg_match('#^/admin/pages/(\d+)/edit$#', $path, $matches) && $method === 'GET') {
         $stmt = $pdo->prepare('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id WHERE p.id=?");
         $stmt->execute([(int) $matches[1]]);
-        view_admin('pages', ['title' => 'Редагувати сторінку', 'edit' => $stmt->fetch() ?: []]);
+        $editPage = $stmt->fetch() ?: [];
+        [$activeCodes] = $editPage ? active_locales($pdo) : [[]];
+        $localeRows = $editPage ? $pdo->query('SELECT code,name,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll() : [];
+        view_admin('pages', [
+            'title' => 'Редагувати сторінку',
+            'edit' => $editPage,
+            'translations' => $editPage ? entity_translations($pdo, 'pages', $editPage) : [],
+            'all_locales' => $localeRows,
+        ]);
         exit;
+    }
+    if (preg_match('#^/admin/pages/(\d+)/translate$#', $path, $matches) && $method === 'POST') {
+        $sourceId = (int) $matches[1];
+        $locale = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($_POST['locale'] ?? '')));
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('pages') . ' WHERE id=?');
+        $stmt->execute([$sourceId]);
+        $source = $stmt->fetch();
+        if ($source && $locale !== '') {
+            $rootId = translation_root_id($source);
+            $existing = $pdo->prepare('SELECT id FROM ' . jura_table('pages') . ' WHERE (id=? OR translation_of=?) AND locale=?');
+            $existing->execute([$rootId, $rootId, $locale]);
+            $newId = (int) $existing->fetchColumn();
+            if (!$newId) {
+                $ins = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,sort_order,locale,translation_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                $ins->execute([(int) $_SESSION['admin_user_id'], $source['title'], $source['slug'], '', $source['excerpt'], 'draft', $source['template'], '', '', '', $source['sort_order'], $locale, $rootId]);
+                $newId = (int) $pdo->lastInsertId();
+                save_route($pdo, '/' . $locale . '/' . $source['slug'], 'page', $newId);
+            }
+            redirect('/admin/pages/' . $newId . '/edit');
+        }
+        redirect('/admin/pages/' . $sourceId . '/edit');
     }
     if (preg_match('#^/admin/pages/(\d+)$#', $path, $matches) && $method === 'POST') {
         $id = (int) $matches[1];

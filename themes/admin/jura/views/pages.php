@@ -1,7 +1,29 @@
 <?php $edit = $edit ?? null; ?>
 <?php if ($edit !== null): $p = $edit; ?>
+<?php if (!empty($p['id'])):
+  $translations = $translations ?? [];
+  $allLocales = $all_locales ?? [];
+?>
+<section class="jura-card" style="margin-bottom:1rem">
+  <h2 style="margin-top:0">Переклади</h2>
+  <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+    <?php foreach ($allLocales as $l): $code = $l['code']; $t = $translations[$code] ?? null; ?>
+      <?php if ($t): ?>
+      <a class="jura-btn <?= (int) $t['id'] === (int) $p['id'] ? 'jura-btn-primary' : 'jura-btn-secondary' ?>" style="font-size:.85rem"
+        href="/admin/pages/<?= (int) $t['id'] ?>/edit"><?= e($l['native_name']) ?> (<?= e($code) ?>)<?= (int) $t['id'] === (int) $p['id'] ? ' — поточна' : '' ?></a>
+      <?php else: ?>
+      <form method="post" action="/admin/pages/<?= (int) $p['id'] ?>/translate" style="margin:0">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="locale" value="<?= e($code) ?>">
+        <button class="jura-btn" type="submit" style="font-size:.85rem;background:#f8fafc;color:#475569;border:1px dashed #cbd5e1">+ <?= e($l['native_name']) ?> (<?= e($code) ?>)</button>
+      </form>
+      <?php endif; ?>
+    <?php endforeach; ?>
+  </div>
+</section>
+<?php endif; ?>
 <section class="jura-card">
-  <h2 style="margin-top:0"><?= $p ? 'Редагувати сторінку' : 'Нова сторінка' ?></h2>
+  <h2 style="margin-top:0"><?= $p ? 'Редагувати сторінку' : 'Нова сторінка' ?><?= !empty($p['locale']) ? ' <span style="font-size:.75rem;font-weight:400;color:#94a3b8">(' . e($p['locale']) . ')</span>' : '' ?></h2>
   <form method="post" action="<?= e($p ? ('/admin/pages/' . $p['id']) : '/admin/pages') ?>">
     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
     <div class="jura-grid jura-grid-2" style="gap:1rem">
