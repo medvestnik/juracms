@@ -75,7 +75,7 @@ $metaDescription = $meta_description ?? '';
         <?php endif; ?>
       </div>
       <div class="site-footer__contacts">
-        <?php if (!empty($settings['contact_phone'])): ?><a href="tel:<?= e(preg_replace('/[^0-9+]/', '', (string) $settings['contact_phone'])) ?>"><?= e($settings['contact_phone']) ?></a><?php endif; ?>
+        <?php if (!empty($settings['contact_phone']) && ($settings['show_phone'] ?? '1') !== '0'): ?><a href="tel:<?= e(preg_replace('/[^0-9+]/', '', (string) $settings['contact_phone'])) ?>"><?= e($settings['contact_phone']) ?></a><?php endif; ?>
         <?php if (!empty($settings['contact_email'])): ?><a href="mailto:<?= e($settings['contact_email']) ?>"><?= e($settings['contact_email']) ?></a><?php endif; ?>
         <?php if (!empty($settings['contact_address'])): ?><span><?= e($settings['contact_address']) ?></span><?php endif; ?>
       </div>

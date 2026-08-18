@@ -362,7 +362,7 @@ if (str_starts_with($path, '/admin')) {
         if ($method === 'POST') {
             foreach ($_POST['settings'] ?? [] as $key => $value) {
                 $group = str_contains((string) $key, 'locale') ? 'localization' : 'system';
-                if (str_starts_with((string) $key, 'contact_') || str_starts_with((string) $key, 'social_') || (string) $key === 'contact_address') {
+                if (str_starts_with((string) $key, 'contact_') || str_starts_with((string) $key, 'social_') || (string) $key === 'contact_address' || (string) $key === 'show_phone') {
                     $group = 'contacts';
                 }
                 if (in_array((string) $key, ['google_maps_embed', 'gtm_id', 'ga4_id', 'google_ads_id', 'fb_pixel_id', 'fb_access_token'], true)) {
@@ -389,6 +389,9 @@ if (str_starts_with($path, '/admin')) {
             // Checkboxes not sent when unchecked — save explicit 0
             if (!isset($_POST['settings']['admin_dark_mode'])) {
                 save_setting($pdo, 'admin_dark_mode', '0', 'system');
+            }
+            if (!isset($_POST['settings']['show_phone'])) {
+                save_setting($pdo, 'show_phone', '0', 'contacts');
             }
             session_flash('success', 'Settings saved.');
             redirect('/admin/settings');

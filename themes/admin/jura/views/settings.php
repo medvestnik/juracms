@@ -40,6 +40,13 @@
         <input class="jura-input" name="settings[contact_phone2]" value="<?= e($s['contact_phone2'] ?? '') ?>" placeholder="+380 67 000 00 00">
       </div>
       <div>
+        <label class="jura-label">Показ телефону на сайті</label>
+        <label style="display:flex;align-items:center;gap:.5rem;margin-top:.4rem">
+          <input type="checkbox" name="settings[show_phone]" value="1" <?= ($s['show_phone'] ?? '1') === '0' ? '' : 'checked' ?>>
+          Показувати телефон на сайті
+        </label>
+      </div>
+      <div>
         <label class="jura-label">Email</label>
         <input class="jura-input" name="settings[contact_email]" value="<?= e($s['contact_email'] ?? '') ?>" placeholder="info@example.com">
       </div>
