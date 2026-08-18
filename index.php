@@ -244,7 +244,7 @@ function admin_stats(PDO $pdo): array
         try { $stats[$table] = (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table($table))->fetchColumn(); } catch (\Throwable $e) { $stats[$table] = 0; }
     }
     try { $stats['leads'] = (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table('form_submissions'))->fetchColumn(); } catch (\Throwable $e) { $stats['leads'] = 0; }
-    return $stats;
+    return array_merge($stats, ModuleLoader::hookCollect('admin_stats', $pdo));
 }
 
 function save_route(PDO $pdo, string $path, string $entityType, int $entityId): void
@@ -1030,6 +1030,7 @@ if ($route) {
         $page = $stmt->fetch();
         if ($page) {
             $settings = cms_settings($pdo);
+            $page['content'] = ModuleLoader::hookFilter('filter_page_content', $page['content'] ?? '', $settings);
             if (($page['template'] ?? '') === 'blog') {
                 $perPage = max(1, (int)($settings['blog_per_page'] ?? 12));
                 $totalPosts = (int)$pdo->query('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published'")->fetchColumn();
@@ -1041,7 +1042,8 @@ if ($route) {
             } elseif (($page['template'] ?? '') === 'contacts') {
                 view_frontend('contacts', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
             } elseif (($page['template'] ?? '') === 'home') {
-                view_frontend('home', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
+                $homeExtra = ModuleLoader::hookCollect('home_data', $pdo);
+                view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $homeExtra));
             } else {
                 view_frontend('page', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
             }

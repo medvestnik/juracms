@@ -33,6 +33,8 @@
   </div>
 </div>
 
+<?= \App\Core\ModuleLoader::hookRender('dashboard_widgets', $s) ?>
+
 <div class="jura-grid jura-grid-2">
   <section class="jura-card">
     <h2 class="jura-card-title" style="margin-bottom:1rem">Швидкі дії</h2>

@@ -110,6 +110,55 @@ final class ModuleLoader
         return false;
     }
 
+    /** Call a hook on every module and merge their array returns into one —
+     * lets a module contribute extra dashboard stats or template data
+     * without core needing to know the module exists (e.g. admin_stats,
+     * home_data). */
+    public static function hookCollect(string $hook, mixed ...$args): array
+    {
+        $result = [];
+        foreach (self::$registry as $config) {
+            if (!empty($config[$hook]) && is_callable($config[$hook])) {
+                $r = ($config[$hook])(...$args);
+                if (is_array($r)) {
+                    $result = array_merge($result, $r);
+                }
+            }
+        }
+        return $result;
+    }
+
+    /** Call a hook on every module and concatenate their string returns —
+     * lets a module render extra markup into a fixed core slot (e.g. extra
+     * dashboard widget cards). */
+    public static function hookRender(string $hook, mixed ...$args): string
+    {
+        $out = '';
+        foreach (self::$registry as $config) {
+            if (!empty($config[$hook]) && is_callable($config[$hook])) {
+                $r = ($config[$hook])(...$args);
+                if (is_string($r)) {
+                    $out .= $r;
+                }
+            }
+        }
+        return $out;
+    }
+
+    /** Pipe a value through every module's hook, each getting the previous
+     * module's output — lets a module transform content generically (e.g.
+     * shortcode substitution in page content) without core special-casing
+     * any one module. */
+    public static function hookFilter(string $hook, mixed $value, mixed ...$args): mixed
+    {
+        foreach (self::$registry as $config) {
+            if (!empty($config[$hook]) && is_callable($config[$hook])) {
+                $value = ($config[$hook])($value, ...$args);
+            }
+        }
+        return $value;
+    }
+
     // ── Admin nav ───────────────────────────────────────────────────────────
     /** Returns nav groups contributed by installed modules. */
     public static function getAdminNav(): array
