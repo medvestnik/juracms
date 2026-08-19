@@ -1220,7 +1220,7 @@ if ($route) {
             } elseif (($page['template'] ?? '') === 'contacts') {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             } elseif (($page['template'] ?? '') === 'home') {
-                $homeExtra = ModuleLoader::hookCollect('home_data', $pdo);
+                $homeExtra = ModuleLoader::hookCollect('home_data', $pdo, $locale);
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra)));
             } else {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));

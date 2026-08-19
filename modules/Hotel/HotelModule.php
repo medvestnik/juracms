@@ -15,6 +15,12 @@ function hotel_ensure_schema(PDO $pdo): void
         ['hotel_rooms', 'featured_image', 'VARCHAR(255) NULL'],
         ['hotel_rooms', 'show_similar_rooms', 'TINYINT(1) NOT NULL DEFAULT 1'],
         ['hotel_room_images', 'is_featured', 'TINYINT(1) NOT NULL DEFAULT 0'],
+        // Empty locale = shown for every locale (matches the fallback used
+        // for pages/posts) -- lets existing rooms/promotions/galleries
+        // keep showing up without an admin having to tag them.
+        ['hotel_rooms', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
+        ['hotel_promotions', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
+        ['hotel_galleries', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
     ] as [$tbl, $col, $def]) {
         $tn = str_replace('`', '', jura_table($tbl));
         if (!$pdo->query("SHOW COLUMNS FROM `{$tn}` LIKE " . $pdo->quote($col))->fetch()) {
@@ -118,17 +124,21 @@ function hotel_dashboard_widgets(array $stats): string
 // Feeds featured rooms/promotions into the home template via
 // ModuleLoader::hookCollect('home_data', $pdo) — see index.php's home-template
 // branch and themes/frontend/default/views/home.php.
-function hotel_home_data(PDO $pdo): array
+function hotel_home_data(PDO $pdo, string $locale = ''): array
 {
     $featuredRooms = [];
     $featuredPromotions = [];
     try {
-        $featuredRooms = $pdo->query('SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE status='published' ORDER BY sort_order,id LIMIT 3")->fetchAll();
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE status='published' AND (locale=? OR locale='') ORDER BY sort_order,id LIMIT 3");
+        $stmt->execute([$locale]);
+        $featuredRooms = $stmt->fetchAll();
     } catch (\Throwable $e) {
         $featuredRooms = [];
     }
     try {
-        $featuredPromotions = $pdo->query('SELECT * FROM ' . jura_table('hotel_promotions') . " WHERE status='published' ORDER BY sort_order,id DESC LIMIT 3")->fetchAll();
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_promotions') . " WHERE status='published' AND (locale=? OR locale='') ORDER BY sort_order,id DESC LIMIT 3");
+        $stmt->execute([$locale]);
+        $featuredPromotions = $stmt->fetchAll();
     } catch (\Throwable $e) {
         $featuredPromotions = [];
     }
@@ -180,8 +190,8 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
     if ($path === '/admin/hotel/rooms/create') {
         if ($method === 'POST') {
             $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
-            $pdo->prepare('INSERT INTO ' . jura_table('hotel_rooms') . ' (slug,title,excerpt,description,status,area,capacity,price_from,currency,meta_title,meta_description,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['description'] ?? '', $_POST['status'] ?? 'draft', $_POST['area'] ?? '', $_POST['capacity'] ?? '', (float)($_POST['price_from'] ?? 0), $_POST['currency'] ?? 'UAH', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int)($_POST['sort_order'] ?? 0)]);
+            $pdo->prepare('INSERT INTO ' . jura_table('hotel_rooms') . ' (slug,title,excerpt,description,status,area,capacity,price_from,currency,meta_title,meta_description,sort_order,locale) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['description'] ?? '', $_POST['status'] ?? 'draft', $_POST['area'] ?? '', $_POST['capacity'] ?? '', (float)($_POST['price_from'] ?? 0), $_POST['currency'] ?? 'UAH', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int)($_POST['sort_order'] ?? 0), (string)($_POST['locale'] ?? '')]);
             $roomId = (int)$pdo->lastInsertId();
             $pdo->prepare('DELETE FROM ' . jura_table('hotel_room_amenities') . ' WHERE room_id=?')->execute([$roomId]);
             foreach (array_map('intval', $_POST['amenity_ids'] ?? []) as $aid) {
@@ -191,7 +201,8 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
             redirect(isset($_POST['_close']) ? '/admin/hotel/rooms' : '/admin/hotel/rooms/' . $roomId . '/edit');
         }
         $allAmenities = $pdo->query('SELECT * FROM ' . jura_table('hotel_amenities') . ' ORDER BY sort_order,id')->fetchAll();
-        view_admin('hotel/room-edit', ['title' => 'Новий номер', 'room' => [], 'all_amenities' => $allAmenities, 'room_amenity_ids' => [], 'room_rates' => []]);
+        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('hotel/room-edit', ['title' => 'Новий номер', 'room' => [], 'all_amenities' => $allAmenities, 'room_amenity_ids' => [], 'room_rates' => [], 'all_locales' => $allLocales]);
         return true;
     }
 
@@ -202,8 +213,8 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         $room = $stmt->fetch();
         if ($method === 'POST') {
             $slug = trim((string)($_POST['slug'] ?: slugify((string)$_POST['title'])));
-            $pdo->prepare('UPDATE ' . jura_table('hotel_rooms') . ' SET slug=?,title=?,excerpt=?,description=?,status=?,area=?,capacity=?,price_from=?,currency=?,meta_title=?,meta_description=?,sort_order=?,show_similar_rooms=?,updated_at=NOW() WHERE id=?')
-                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['description'] ?? '', $_POST['status'] ?? 'draft', $_POST['area'] ?? '', $_POST['capacity'] ?? '', (float)($_POST['price_from'] ?? 0), $_POST['currency'] ?? 'UAH', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int)($_POST['sort_order'] ?? 0), isset($_POST['show_similar_rooms']) ? 1 : 0, $id]);
+            $pdo->prepare('UPDATE ' . jura_table('hotel_rooms') . ' SET slug=?,title=?,excerpt=?,description=?,status=?,area=?,capacity=?,price_from=?,currency=?,meta_title=?,meta_description=?,sort_order=?,show_similar_rooms=?,locale=?,updated_at=NOW() WHERE id=?')
+                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['description'] ?? '', $_POST['status'] ?? 'draft', $_POST['area'] ?? '', $_POST['capacity'] ?? '', (float)($_POST['price_from'] ?? 0), $_POST['currency'] ?? 'UAH', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int)($_POST['sort_order'] ?? 0), isset($_POST['show_similar_rooms']) ? 1 : 0, (string)($_POST['locale'] ?? ''), $id]);
             $pdo->prepare('DELETE FROM ' . jura_table('hotel_room_amenities') . ' WHERE room_id=?')->execute([$id]);
             foreach (array_map('intval', $_POST['amenity_ids'] ?? []) as $aid) {
                 if ($aid > 0) $pdo->prepare('INSERT IGNORE INTO ' . jura_table('hotel_room_amenities') . ' (room_id,amenity_id) VALUES (?,?)')->execute([$id, $aid]);
@@ -215,7 +226,8 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         $roomAmenityIds = $pdo->query('SELECT amenity_id FROM ' . jura_table('hotel_room_amenities') . ' WHERE room_id=' . $id)->fetchAll(PDO::FETCH_COLUMN, 0);
         $roomRates = $pdo->query('SELECT * FROM ' . jura_table('hotel_room_rates') . ' WHERE room_id=' . $id . ' ORDER BY sort_order,id')->fetchAll();
         $roomImages = $pdo->query('SELECT * FROM ' . jura_table('hotel_room_images') . ' WHERE room_id=' . $id . ' ORDER BY is_featured DESC,sort_order,id')->fetchAll();
-        view_admin('hotel/room-edit', ['title' => 'Редагувати номер', 'room' => $room, 'all_amenities' => $allAmenities, 'room_amenity_ids' => array_map('intval', $roomAmenityIds), 'room_rates' => $roomRates, 'room_images' => $roomImages]);
+        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('hotel/room-edit', ['title' => 'Редагувати номер', 'room' => $room, 'all_amenities' => $allAmenities, 'room_amenity_ids' => array_map('intval', $roomAmenityIds), 'room_rates' => $roomRates, 'room_images' => $roomImages, 'all_locales' => $allLocales]);
         return true;
     }
 
@@ -309,11 +321,12 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         if ($method === 'POST') {
             $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
             $status = (string) ($_POST['status'] ?? 'draft');
-            $pdo->prepare('INSERT INTO ' . jura_table('hotel_promotions') . ' (slug,title,excerpt,content,status,meta_title,meta_description,sort_order,published_at) VALUES (?,?,?,?,?,?,?,?,CASE WHEN ?="published" THEN NOW() ELSE NULL END)')
-                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $status]);
+            $pdo->prepare('INSERT INTO ' . jura_table('hotel_promotions') . ' (slug,title,excerpt,content,status,meta_title,meta_description,sort_order,locale,published_at) VALUES (?,?,?,?,?,?,?,?,?,CASE WHEN ?="published" THEN NOW() ELSE NULL END)')
+                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), (string) ($_POST['locale'] ?? ''), $status]);
             redirect('/admin/hotel/promotions');
         }
-        view_admin('hotel/promotion-edit', ['title' => 'Нова акція', 'promotion' => []]);
+        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('hotel/promotion-edit', ['title' => 'Нова акція', 'promotion' => [], 'all_locales' => $allLocales]);
         return true;
     }
 
@@ -325,11 +338,12 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
             $id = (int) $matches[1];
             $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
             $status = (string) ($_POST['status'] ?? 'draft');
-            $pdo->prepare('UPDATE ' . jura_table('hotel_promotions') . ' SET slug=?,title=?,excerpt=?,content=?,status=?,meta_title=?,meta_description=?,sort_order=?,updated_at=NOW() WHERE id=?')
-                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $id]);
+            $pdo->prepare('UPDATE ' . jura_table('hotel_promotions') . ' SET slug=?,title=?,excerpt=?,content=?,status=?,meta_title=?,meta_description=?,sort_order=?,locale=?,updated_at=NOW() WHERE id=?')
+                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), (string) ($_POST['locale'] ?? ''), $id]);
             redirect('/admin/hotel/promotions');
         }
-        view_admin('hotel/promotion-edit', ['title' => 'Редагувати акцію', 'promotion' => $promo]);
+        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('hotel/promotion-edit', ['title' => 'Редагувати акцію', 'promotion' => $promo, 'all_locales' => $allLocales]);
         return true;
     }
 
@@ -341,11 +355,12 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
     if ($path === '/admin/hotel/galleries/create') {
         if ($method === 'POST') {
             $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
-            $pdo->prepare('INSERT INTO ' . jura_table('hotel_galleries') . ' (slug,title,description,status,meta_title,meta_description,sort_order) VALUES (?,?,?,?,?,?,?)')
-                ->execute([$slug, $_POST['title'], $_POST['description'] ?? '', $_POST['status'] ?? 'active', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0)]);
+            $pdo->prepare('INSERT INTO ' . jura_table('hotel_galleries') . ' (slug,title,description,status,meta_title,meta_description,sort_order,locale) VALUES (?,?,?,?,?,?,?,?)')
+                ->execute([$slug, $_POST['title'], $_POST['description'] ?? '', $_POST['status'] ?? 'active', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), (string) ($_POST['locale'] ?? '')]);
             redirect('/admin/hotel/galleries');
         }
-        view_admin('hotel/gallery-edit', ['title' => 'Нова галерея', 'gallery' => []]);
+        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('hotel/gallery-edit', ['title' => 'Нова галерея', 'gallery' => [], 'all_locales' => $allLocales]);
         return true;
     }
 
@@ -356,13 +371,14 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         $gal = $stmt->fetch();
         if ($method === 'POST') {
             $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
-            $pdo->prepare('UPDATE ' . jura_table('hotel_galleries') . ' SET slug=?,title=?,description=?,status=?,meta_title=?,meta_description=?,sort_order=?,updated_at=NOW() WHERE id=?')
-                ->execute([$slug, $_POST['title'], $_POST['description'] ?? '', $_POST['status'] ?? 'active', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $id]);
+            $pdo->prepare('UPDATE ' . jura_table('hotel_galleries') . ' SET slug=?,title=?,description=?,status=?,meta_title=?,meta_description=?,sort_order=?,locale=?,updated_at=NOW() WHERE id=?')
+                ->execute([$slug, $_POST['title'], $_POST['description'] ?? '', $_POST['status'] ?? 'active', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), (string) ($_POST['locale'] ?? ''), $id]);
             redirect('/admin/hotel/galleries/' . $id . '/edit');
         }
         $imgStmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_gallery_images') . ' WHERE gallery_id=? ORDER BY sort_order,id');
         $imgStmt->execute([$id]);
-        view_admin('hotel/gallery-edit', ['title' => 'Редагувати галерею', 'gallery' => $gal, 'gallery_images' => $imgStmt->fetchAll()]);
+        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('hotel/gallery-edit', ['title' => 'Редагувати галерею', 'gallery' => $gal, 'gallery_images' => $imgStmt->fetchAll(), 'all_locales' => $allLocales]);
         return true;
     }
 
@@ -444,14 +460,20 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
 
 function hotel_handle_frontend(string $path, PDO $pdo): bool
 {
+    // current_locale() is defined earlier in index.php and already loaded
+    // by the time module hooks run -- strip the /en, /ru style prefix the
+    // same way core page/post routing does, so /en/rooms works too.
+    [$locale, $path] = current_locale($pdo, $path);
+
     if ($path === '/rooms') {
-        $rooms = $pdo->query('SELECT r.*,fi.title as feat_img_file FROM ' . jura_table('hotel_rooms') . ' r LEFT JOIN ' . jura_table('hotel_room_images') . ' fi ON fi.room_id=r.id AND fi.is_featured=1' . " WHERE r.status='published' ORDER BY r.sort_order,r.id")->fetchAll();
-        view_frontend('hotel/rooms', ['title' => 'Номери', 'rooms' => $rooms, 'settings' => cms_settings($pdo)]);
+        $stmt = $pdo->prepare('SELECT r.*,fi.title as feat_img_file FROM ' . jura_table('hotel_rooms') . ' r LEFT JOIN ' . jura_table('hotel_room_images') . ' fi ON fi.room_id=r.id AND fi.is_featured=1' . " WHERE r.status='published' AND (r.locale=? OR r.locale='') ORDER BY r.sort_order,r.id");
+        $stmt->execute([$locale]);
+        view_frontend('hotel/rooms', ['title' => 'Номери', 'rooms' => $stmt->fetchAll(), 'settings' => cms_settings($pdo), 'locale' => $locale]);
         return true;
     }
     if (preg_match('#^/rooms/([^/]+)$#', $path, $matches)) {
-        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE slug=? AND status='published' LIMIT 1");
-        $stmt->execute([$matches[1]]);
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE slug=? AND status='published' AND (locale=? OR locale='') LIMIT 1");
+        $stmt->execute([$matches[1], $locale]);
         $room = $stmt->fetch();
         if ($room) {
             $room['amenity_list'] = $pdo->query(
@@ -465,35 +487,40 @@ function hotel_handle_frontend(string $path, PDO $pdo): bool
             )->fetchAll();
             $similarRooms = [];
             if ($room['show_similar_rooms'] ?? 1) {
-                $similarRooms = $pdo->query(
-                    'SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE status='published' AND id<>" . (int)$room['id'] . ' ORDER BY sort_order,id'
-                )->fetchAll();
+                $similarStmt = $pdo->prepare(
+                    'SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE status='published' AND (locale=? OR locale='') AND id<>? ORDER BY sort_order,id"
+                );
+                $similarStmt->execute([$locale, (int) $room['id']]);
+                $similarRooms = $similarStmt->fetchAll();
                 foreach ($similarRooms as &$sr) {
                     $fi = $pdo->query('SELECT title FROM ' . jura_table('hotel_room_images') . ' WHERE room_id=' . (int)$sr['id'] . ' AND is_featured=1 LIMIT 1')->fetch();
                     $sr['_feat_img'] = $fi ? $fi['title'] : null;
                 }
                 unset($sr);
             }
-            view_frontend('hotel/room', ['title' => $room['meta_title'] ?: $room['title'], 'meta_description' => $room['meta_description'], 'room' => $room, 'similar_rooms' => $similarRooms, 'settings' => cms_settings($pdo)]);
+            view_frontend('hotel/room', ['title' => $room['meta_title'] ?: $room['title'], 'meta_description' => $room['meta_description'], 'room' => $room, 'similar_rooms' => $similarRooms, 'settings' => cms_settings($pdo), 'locale' => $locale]);
             return true;
         }
     }
     if ($path === '/promotions') {
-        $promotions = $pdo->query('SELECT * FROM ' . jura_table('hotel_promotions') . " WHERE status='published' ORDER BY sort_order,id DESC")->fetchAll();
-        view_frontend('hotel/promotions', ['title' => 'Акції', 'promotions' => $promotions, 'settings' => cms_settings($pdo)]);
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_promotions') . " WHERE status='published' AND (locale=? OR locale='') ORDER BY sort_order,id DESC");
+        $stmt->execute([$locale]);
+        view_frontend('hotel/promotions', ['title' => 'Акції', 'promotions' => $stmt->fetchAll(), 'settings' => cms_settings($pdo), 'locale' => $locale]);
         return true;
     }
     if (preg_match('#^/promotions/([^/]+)$#', $path, $matches)) {
-        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_promotions') . " WHERE slug=? AND status='published' LIMIT 1");
-        $stmt->execute([$matches[1]]);
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_promotions') . " WHERE slug=? AND status='published' AND (locale=? OR locale='') LIMIT 1");
+        $stmt->execute([$matches[1], $locale]);
         $promotion = $stmt->fetch();
         if ($promotion) {
-            view_frontend('hotel/promotion', ['title' => $promotion['meta_title'] ?: $promotion['title'], 'meta_description' => $promotion['meta_description'], 'promotion' => $promotion, 'settings' => cms_settings($pdo)]);
+            view_frontend('hotel/promotion', ['title' => $promotion['meta_title'] ?: $promotion['title'], 'meta_description' => $promotion['meta_description'], 'promotion' => $promotion, 'settings' => cms_settings($pdo), 'locale' => $locale]);
             return true;
         }
     }
     if ($path === '/gallery') {
-        $galleries = $pdo->query('SELECT * FROM ' . jura_table('hotel_galleries') . " WHERE status='active' ORDER BY sort_order,id")->fetchAll();
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_galleries') . " WHERE status='active' AND (locale=? OR locale='') ORDER BY sort_order,id");
+        $stmt->execute([$locale]);
+        $galleries = $stmt->fetchAll();
         // Load images for each gallery
         foreach ($galleries as &$gal) {
             $imgQ = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_gallery_images') . ' WHERE gallery_id=? ORDER BY sort_order,id');
@@ -501,7 +528,7 @@ function hotel_handle_frontend(string $path, PDO $pdo): bool
             $gal['images'] = $imgQ->fetchAll();
         }
         unset($gal);
-        view_frontend('hotel/gallery', ['title' => 'Галерея', 'galleries' => $galleries, 'settings' => cms_settings($pdo)]);
+        view_frontend('hotel/gallery', ['title' => 'Галерея', 'galleries' => $galleries, 'settings' => cms_settings($pdo), 'locale' => $locale]);
         return true;
     }
     return false;
