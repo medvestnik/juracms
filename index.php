@@ -51,7 +51,7 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
-const CMS_SCHEMA_VERSION = '3';
+const CMS_SCHEMA_VERSION = '4';
 
 function ensure_cms_schema(PDO $pdo): void
 {
@@ -160,6 +160,13 @@ function ensure_cms_schema(PDO $pdo): void
     // rendering exactly as before until an admin adds real translations.
     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
     $pdo->prepare('UPDATE ' . jura_table('posts') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
+
+    // Any admin user works as the author here -- this just needs to exist,
+    // not belong to anyone in particular.
+    $anyAdminId = (int) $pdo->query('SELECT id FROM ' . jura_table('users') . ' ORDER BY id LIMIT 1')->fetchColumn();
+    if ($anyAdminId) {
+        jura_seed_thankyou_page($pdo, $anyAdminId);
+    }
 
     $dir = dirname($marker);
     if (!is_dir($dir)) {
@@ -870,6 +877,10 @@ if (str_starts_with($path, '/admin')) {
                     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET content=? WHERE slug='contacts' ORDER BY id LIMIT 1")->execute([$contactsContent]);
                     $msg = 'Демо-контент оновлено на сторінках home, about, contacts';
                 }
+                if ($action === 'install_demo_data') {
+                    $created = jura_seed_demo_posts($pdo, (int) $_SESSION['admin_user_id']);
+                    $msg = $created > 0 ? "Додано демо-публікацій: {$created}" : 'Демо-публікації вже встановлені.';
+                }
             } catch (Throwable $e) {
                 session_flash('maint_error', $e->getMessage());
                 redirect('/admin/maintenance');
@@ -891,27 +902,6 @@ if (str_starts_with($path, '/admin')) {
         $gitRemote = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' remote get-url origin 2>/dev/null'));
         $gitBranch = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' rev-parse --abbrev-ref HEAD 2>/dev/null'));
         $gitLastCommit = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' log -1 --format="%h %s (%cr)" 2>/dev/null'));
-
-        // Migrations info
-        $migrationsDir = BASE_PATH . '/migrations';
-        $pendingMigrations = [];
-        $appliedMigrations = [];
-        try {
-            $applied = $pdo->query('SELECT migration FROM ' . jura_table('migrations') . ' ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
-            $applied = array_flip($applied);
-            if (is_dir($migrationsDir)) {
-                $files = array_filter(scandir($migrationsDir) ?: [], fn($f) => str_ends_with($f, '.sql'));
-                sort($files);
-                foreach ($files as $f) {
-                    if (isset($applied[$f])) {
-                        // already applied – skip
-                    } else {
-                        $pendingMigrations[] = ['file' => $f, 'status' => 'очікує'];
-                    }
-                }
-            }
-            $appliedMigrations = $pdo->query('SELECT migration, executed_at FROM ' . jura_table('migrations') . ' ORDER BY id DESC LIMIT 20')->fetchAll();
-        } catch (Throwable) {}
 
         if ($method === 'POST') {
             $action = (string) ($_POST['action'] ?? '');
@@ -938,33 +928,6 @@ if (str_starts_with($path, '/admin')) {
                 }
                 redirect('/admin/updates');
             }
-            if ($action === 'run_migrations') {
-                $ran = 0; $log = '';
-                if (is_dir($migrationsDir)) {
-                    $files = array_filter(scandir($migrationsDir) ?: [], fn($f) => str_ends_with($f, '.sql'));
-                    sort($files);
-                    try {
-                        $applied = array_flip($pdo->query('SELECT migration FROM ' . jura_table('migrations') . ' ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
-                    } catch (Throwable) { $applied = []; }
-                    foreach ($files as $f) {
-                        if (isset($applied[$f])) continue;
-                        $sql = file_get_contents($migrationsDir . '/' . $f);
-                        try {
-                            $pdo->exec((string)$sql);
-                            $pdo->prepare('INSERT INTO ' . jura_table('migrations') . ' (migration,batch) VALUES (?,1)')->execute([$f]);
-                            $log .= "✓ {$f}\n"; $ran++;
-                        } catch (Throwable $e) { $log .= "✗ {$f}: " . $e->getMessage() . "\n"; }
-                    }
-                }
-                if ($ran > 0) {
-                    session_flash('upd_success', "Виконано міграцій: {$ran}\n{$log}");
-                } elseif ($log !== '') {
-                    session_flash('upd_error', "Помилки при виконанні:\n{$log}");
-                } else {
-                    session_flash('upd_success', 'Немає нових міграцій');
-                }
-                redirect('/admin/updates');
-            }
         }
 
         $errorLogFile = BASE_PATH . '/logs/php-error.log';
@@ -973,7 +936,7 @@ if (str_starts_with($path, '/admin')) {
             $lines = file($errorLogFile, FILE_IGNORE_NEW_LINES) ?: [];
             $errorLogTail = implode("\n", array_slice($lines, -100));
         }
-        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'pending_migrations' => $pendingMigrations, 'applied_migrations' => $appliedMigrations, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
+        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
         exit;
     }
 

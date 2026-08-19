@@ -243,3 +243,70 @@ if (!function_exists('admin_require_auth')) {
         }
     }
 }
+
+if (!function_exists('jura_seed_thankyou_page')) {
+    // Callable both from the installer (before index.php's function set
+    // exists) and from the admin, so it only depends on helpers loaded by
+    // core/start.php. Idempotent: pages/routes have no unique slug/path
+    // constraint to lean on for pages, so it checks before inserting.
+    function jura_seed_thankyou_page(PDO $pdo, int $authorId): void
+    {
+        $existing = $pdo->prepare('SELECT id FROM ' . jura_table('pages') . ' WHERE slug=? LIMIT 1');
+        $existing->execute(['thankyou']);
+        $pageId = (int) $existing->fetchColumn();
+
+        if (!$pageId) {
+            $content = '<div style="text-align:center;padding:60px 20px"><div style="font-size:56px;margin-bottom:16px">&#10003;</div><h1 style="font-size:2rem;margin-bottom:16px">Дякуємо за звернення!</h1><p style="font-size:1.1rem;max-width:480px;margin:0 auto 32px">Ваше повідомлення отримано. Ми зв&#39;яжемося з вами найближчим часом.</p><a href="/">На головну</a></div>';
+            $ins = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,status,meta_title,meta_description,sort_order,published_at) VALUES (?,?,?,?,?,?,?,?,NOW())');
+            $ins->execute([$authorId, 'Дякуємо за звернення', 'thankyou', $content, 'published', 'Дякуємо за звернення', 'Ваше повідомлення отримано.', 99]);
+            $pageId = (int) $pdo->lastInsertId();
+        }
+
+        $pdo->prepare('INSERT IGNORE INTO ' . jura_table('routes') . ' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')
+            ->execute(['/thankyou', 'page', $pageId, 'active']);
+        $pdo->prepare('INSERT IGNORE INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?)')
+            ->execute(['thankyou_page', '/thankyou', 'string', 'forms']);
+    }
+}
+
+if (!function_exists('jura_seed_demo_posts')) {
+    /** The lorem-ipsum blog posts previously delivered via migrations/003_demo_posts.sql
+     * (and, separately, install/index.php's own inline demo posts). Idempotent —
+     * safe to call again on a site that already has some or all of them. */
+    function jura_seed_demo_posts(PDO $pdo, int $authorId): int
+    {
+        $catId = (int) $pdo->query('SELECT id FROM ' . jura_table('post_categories') . " WHERE slug='news' LIMIT 1")->fetchColumn();
+        if (!$catId) {
+            $pdo->prepare('INSERT INTO ' . jura_table('post_categories') . ' (title,slug,description) VALUES (?,?,?)')->execute(['Новини', 'news', '']);
+            $catId = (int) $pdo->lastInsertId();
+        }
+
+        $posts = [
+            ['Lorem Ipsum Dolor Sit Amet', 'lorem-ipsum-dolor-sit-amet', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.', '<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>', 4],
+            ['Consectetur Adipiscing Elit', 'consectetur-adipiscing-elit', 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.', '<p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.</p>', 3],
+            ['Sed Do Eiusmod Tempor', 'sed-do-eiusmod-tempor', 'Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.', '<p>Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.</p>', 2],
+            ['Ut Enim Ad Minim Veniam', 'ut-enim-ad-minim-veniam', 'At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum.', '<p>At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.</p>', 1],
+            ['Duis Aute Irure Dolor', 'duis-aute-irure-dolor', 'Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod maxime placeat.', '<p>Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod maxime placeat facere possimus, omnis voluptas assumenda est, omnis dolor repellendus.</p>', 0],
+        ];
+
+        // Read directly rather than via active_locales()/cms_settings() --
+        // those live in index.php, which the installer never loads.
+        $localeStmt = $pdo->query("SELECT setting_value FROM " . jura_table('settings') . " WHERE setting_key='default_locale' LIMIT 1");
+        $defaultLocale = (string) ($localeStmt->fetchColumn() ?: 'uk');
+        $created = 0;
+        foreach ($posts as [$title, $slug, $excerpt, $content, $daysAgo]) {
+            $exists = $pdo->prepare('SELECT id FROM ' . jura_table('posts') . ' WHERE slug=? LIMIT 1');
+            $exists->execute([$slug]);
+            $postId = (int) $exists->fetchColumn();
+            if (!$postId) {
+                $ins = $pdo->prepare('INSERT INTO ' . jura_table('posts') . ' (author_id,title,slug,excerpt,content,status,meta_title,meta_description,sort_order,locale,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW() - INTERVAL ? DAY)');
+                $ins->execute([$authorId, $title, $slug, $excerpt, $content, 'published', $title, $excerpt, 0, $defaultLocale, $daysAgo]);
+                $postId = (int) $pdo->lastInsertId();
+                $created++;
+            }
+            $pdo->prepare('INSERT IGNORE INTO ' . jura_table('post_category_relations') . ' (post_id,category_id) VALUES (?,?)')->execute([$postId, $catId]);
+            $pdo->prepare('INSERT IGNORE INTO ' . jura_table('routes') . ' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')->execute(['/blog/' . $slug, 'post', $postId, 'active']);
+        }
+        return $created;
+    }
+}

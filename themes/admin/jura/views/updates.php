@@ -1,6 +1,4 @@
 <?php
-$pending = $pending_migrations ?? [];
-$applied = $applied_migrations ?? [];
 $check = $update_check ?? null;
 ?>
 <?php if (!empty($flash_success)): ?>
@@ -80,25 +78,6 @@ $check = $update_check ?? null;
   </form>
 </details>
 
-<section class="jura-card" style="margin-bottom:1rem">
-  <h2 style="margin-top:0">Міграції, що очікують (<?= count($pending) ?>)</h2>
-  <?php if (empty($pending)): ?>
-  <p style="color:#888">Немає нових міграцій.</p>
-  <?php else: ?>
-  <p style="color:#64748b;font-size:.88rem">Це разові доповнення до вмісту (сторінка «Дякуємо», поле «Телефон 2», демо-публікації тощо) — їх безпечно виконати, при повторному запуску вже застосовані міграції пропускаються.</p>
-  <ul style="margin:0;padding-left:1.2rem">
-    <?php foreach ($pending as $m): ?>
-    <li><code><?= e($m['file']) ?></code> — <?= e($m['status']) ?></li>
-    <?php endforeach; ?>
-  </ul>
-  <form method="post" style="margin-top:1rem">
-    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-    <input type="hidden" name="action" value="run_migrations">
-    <button class="jura-btn jura-btn-primary" type="submit">Виконати міграції</button>
-  </form>
-  <?php endif; ?>
-</section>
-
 <section class="jura-card" style="margin-top:1rem">
   <h2 style="margin-top:0">Останні помилки (logs/php-error.log)</h2>
   <?php if (empty($error_log_tail)): ?>
@@ -106,21 +85,5 @@ $check = $update_check ?? null;
   <?php else: ?>
   <pre style="background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:8px;overflow:auto;max-height:420px;font-size:.78rem;line-height:1.5;white-space:pre-wrap"><?= e($error_log_tail) ?></pre>
   <p style="color:#94a3b8;font-size:.8rem;margin-top:.5rem">Показано останні 100 рядків.</p>
-  <?php endif; ?>
-</section>
-
-<section class="jura-card">
-  <h2 style="margin-top:0">Виконані міграції</h2>
-  <?php if (empty($applied)): ?>
-  <p style="color:#888">Ще не виконано жодної міграції.</p>
-  <?php else: ?>
-  <table class="jura-table">
-    <thead><tr><th>Файл</th><th>Виконано</th></tr></thead>
-    <tbody>
-    <?php foreach ($applied as $a): ?>
-      <tr><td><code><?= e($a['migration']) ?></code></td><td><?= e($a['executed_at'] ?? '') ?></td></tr>
-    <?php endforeach; ?>
-    </tbody>
-  </table>
   <?php endif; ?>
 </section>
