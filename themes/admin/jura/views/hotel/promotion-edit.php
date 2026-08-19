@@ -51,13 +51,24 @@ $formAction = $isCreate ? '/admin/hotel/promotions/create' : '/admin/hotel/promo
       <label class="jura-label">Meta description</label>
       <textarea class="jura-input" name="meta_description" rows="2"><?= e($p['meta_description'] ?? '') ?></textarea>
     </div>
-    <div style="margin-top:1rem">
-      <label class="jura-label">Статус</label>
-      <select class="jura-input" name="status" style="max-width:200px">
-        <?php foreach (['draft' => 'Чернетка', 'published' => 'Опублікований'] as $val => $label): ?>
-          <option value="<?= $val ?>" <?= ($p['status'] ?? 'draft') === $val ? 'selected' : '' ?>><?= $label ?></option>
-        <?php endforeach; ?>
-      </select>
+    <div class="jura-grid jura-grid-2" style="gap:1rem;margin-top:1rem">
+      <div>
+        <label class="jura-label">Статус</label>
+        <select class="jura-input" name="status" style="max-width:200px">
+          <?php foreach (['draft' => 'Чернетка', 'published' => 'Опублікований'] as $val => $label): ?>
+            <option value="<?= $val ?>" <?= ($p['status'] ?? 'draft') === $val ? 'selected' : '' ?>><?= $label ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div>
+        <label class="jura-label">Мова</label>
+        <select class="jura-input" name="locale" style="max-width:200px">
+          <option value="" <?= empty($p['locale']) ? 'selected' : '' ?>>Всі мови</option>
+          <?php foreach (($all_locales ?? []) as $l): ?>
+            <option value="<?= e($l['code']) ?>" <?= ($p['locale'] ?? '') === $l['code'] ? 'selected' : '' ?>><?= e($l['native_name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
     </div>
   </section>
 

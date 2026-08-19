@@ -51,7 +51,7 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
-const CMS_SCHEMA_VERSION = '2';
+const CMS_SCHEMA_VERSION = '4';
 
 function ensure_cms_schema(PDO $pdo): void
 {
@@ -141,16 +141,32 @@ function ensure_cms_schema(PDO $pdo): void
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?)')
             ->execute([$key, $value, 'string', $group]);
     }
-    foreach ([['uk', 'Ukrainian', 'Українська', 1, 1], ['ru', 'Russian', 'Русский', 0, 2], ['en', 'English', 'English', 0, 3]] as $locale) {
+    // default_locale (settings) is the authoritative "what locale is this
+    // site in" value — the installer can set it to anything (e.g. 'ru').
+    // jura_locales.is_default must always agree with it; seed new rows
+    // against it (not a hardcoded 'uk') and reconcile existing rows every
+    // time this runs, since a mismatch here means current_locale()
+    // resolves a different locale than the content was backfilled onto
+    // below, silently emptying every locale-filtered listing (e.g. /blog).
+    $defaultLocale = (string) setting_value($pdo, 'default_locale', 'uk');
+    foreach ([['uk', 'Ukrainian', 'Українська', 1], ['ru', 'Russian', 'Русский', 2], ['en', 'English', 'English', 3]] as [$code, $name, $native, $sort]) {
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('locales') . ' (code,name,native_name,is_default,sort_order) VALUES (?,?,?,?,?)')
-            ->execute($locale);
+            ->execute([$code, $name, $native, $code === $defaultLocale ? 1 : 0, $sort]);
     }
+    $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET is_default=(code=?)')->execute([$defaultLocale]);
+
     // Existing pages/posts predate the locale column — backfill them onto
     // the site's default locale rather than leaving it blank, so they keep
     // rendering exactly as before until an admin adds real translations.
-    $defaultLocale = (string) setting_value($pdo, 'default_locale', 'uk');
     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
     $pdo->prepare('UPDATE ' . jura_table('posts') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
+
+    // Any admin user works as the author here -- this just needs to exist,
+    // not belong to anyone in particular.
+    $anyAdminId = (int) $pdo->query('SELECT id FROM ' . jura_table('users') . ' ORDER BY id LIMIT 1')->fetchColumn();
+    if ($anyAdminId) {
+        jura_seed_thankyou_page($pdo, $anyAdminId);
+    }
 
     $dir = dirname($marker);
     if (!is_dir($dir)) {
@@ -349,6 +365,18 @@ function uploaded_media_path(array $file): ?array
 $path = normalize_admin_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
+// Whole-page cache for anonymous frontend GETs -- served straight off disk,
+// before even connecting to the database, when there's a hit.
+$frontendCacheKey = null;
+if ($method === 'GET' && !str_starts_with($path, '/admin') && !str_starts_with($path, '/install') && !str_starts_with($path, '/forms')) {
+    $frontendCacheKey = cache_key_for_request($path, (string) ($_SERVER['QUERY_STRING'] ?? ''));
+    $cached = cache_get($frontendCacheKey);
+    if ($cached !== null) {
+        echo $cached;
+        exit;
+    }
+}
+
 if (!InstallerRuntime::isInstalled() && !in_array($path, ['/install', '/install/'], true)) {
     redirect('/install/');
 }
@@ -407,6 +435,13 @@ switch (true) {
 if (str_starts_with($path, '/admin')) {
     admin_require_auth();
     $pdo = admin_db();
+    // Any admin write can change what the frontend should show -- flush the
+    // whole page cache rather than trying to track which cached paths a
+    // given save affects. Cheap (a POST is rare next to page views) and
+    // never leaves stale content behind.
+    if ($method === 'POST') {
+        cache_clear();
+    }
     ensure_cms_schema($pdo);
     ModuleLoader::ensureTable($pdo);
     ModuleLoader::autoMigrate($pdo);
@@ -545,7 +580,7 @@ if (str_starts_with($path, '/admin')) {
         $stmt->execute([(int) $_SESSION['admin_user_id'], $_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $status, $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $defaultLocale, $status]);
         $id = (int) $pdo->lastInsertId();
         save_route($pdo, $route, 'page', $id);
-        redirect('/admin/pages');
+        redirect(isset($_POST['_close']) ? '/admin/pages' : '/admin/pages/' . $id . '/edit');
     }
     if (preg_match('#^/admin/pages/(\d+)/edit$#', $path, $matches) && $method === 'GET') {
         $stmt = $pdo->prepare('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id WHERE p.id=?");
@@ -576,7 +611,11 @@ if (str_starts_with($path, '/admin')) {
                 $ins = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,sort_order,locale,translation_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
                 $ins->execute([(int) $_SESSION['admin_user_id'], $source['title'], $source['slug'], '', $source['excerpt'], 'draft', $source['template'], '', '', '', $source['sort_order'], $locale, $rootId]);
                 $newId = (int) $pdo->lastInsertId();
-                save_route($pdo, '/' . $locale . '/' . $source['slug'], 'page', $newId);
+                // The home page's translation gets its locale's root URL
+                // (/en) rather than /en/home -- home is always "/" in the
+                // default locale, so its translations follow the same rule.
+                $routePath = $source['template'] === 'home' ? '/' . $locale : '/' . $locale . '/' . $source['slug'];
+                save_route($pdo, $routePath, 'page', $newId);
             }
             redirect('/admin/pages/' . $newId . '/edit');
         }
@@ -590,7 +629,7 @@ if (str_starts_with($path, '/admin')) {
             ->execute([$_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $_POST['status'] ?? 'draft', $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $_POST['status'] ?? 'draft', $id]);
         $pdo->prepare('DELETE FROM ' . jura_table('routes') . " WHERE entity_type='page' AND entity_id=?")->execute([$id]);
         save_route($pdo, $route, 'page', $id);
-        redirect('/admin/pages');
+        redirect(isset($_POST['_close']) ? '/admin/pages' : '/admin/pages/' . $id . '/edit');
     }
     if (preg_match('#^/admin/pages/(\d+)/delete$#', $path, $matches) && $method === 'POST') {
         $id = (int) $matches[1];
@@ -857,6 +896,15 @@ if (str_starts_with($path, '/admin')) {
                     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET content=? WHERE slug='contacts' ORDER BY id LIMIT 1")->execute([$contactsContent]);
                     $msg = 'Демо-контент оновлено на сторінках home, about, contacts';
                 }
+                if ($action === 'install_demo_data') {
+                    $created = jura_seed_demo_posts($pdo, (int) $_SESSION['admin_user_id']);
+                    $msg = $created > 0 ? "Додано демо-публікацій: {$created}" : 'Демо-публікації вже встановлені.';
+                }
+                if ($action === 'clear_cache') {
+                    // Already flushed by the blanket admin-POST hook above;
+                    // this just gives a clear confirmation message.
+                    $msg = 'Кеш сторінок очищено.';
+                }
             } catch (Throwable $e) {
                 session_flash('maint_error', $e->getMessage());
                 redirect('/admin/maintenance');
@@ -878,27 +926,6 @@ if (str_starts_with($path, '/admin')) {
         $gitRemote = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' remote get-url origin 2>/dev/null'));
         $gitBranch = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' rev-parse --abbrev-ref HEAD 2>/dev/null'));
         $gitLastCommit = trim(safe_shell_exec('git -C ' . escapeshellarg(BASE_PATH) . ' log -1 --format="%h %s (%cr)" 2>/dev/null'));
-
-        // Migrations info
-        $migrationsDir = BASE_PATH . '/migrations';
-        $pendingMigrations = [];
-        $appliedMigrations = [];
-        try {
-            $applied = $pdo->query('SELECT migration FROM ' . jura_table('migrations') . ' ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
-            $applied = array_flip($applied);
-            if (is_dir($migrationsDir)) {
-                $files = array_filter(scandir($migrationsDir) ?: [], fn($f) => str_ends_with($f, '.sql'));
-                sort($files);
-                foreach ($files as $f) {
-                    if (isset($applied[$f])) {
-                        // already applied – skip
-                    } else {
-                        $pendingMigrations[] = ['file' => $f, 'status' => 'очікує'];
-                    }
-                }
-            }
-            $appliedMigrations = $pdo->query('SELECT migration, executed_at FROM ' . jura_table('migrations') . ' ORDER BY id DESC LIMIT 20')->fetchAll();
-        } catch (Throwable) {}
 
         if ($method === 'POST') {
             $action = (string) ($_POST['action'] ?? '');
@@ -925,33 +952,6 @@ if (str_starts_with($path, '/admin')) {
                 }
                 redirect('/admin/updates');
             }
-            if ($action === 'run_migrations') {
-                $ran = 0; $log = '';
-                if (is_dir($migrationsDir)) {
-                    $files = array_filter(scandir($migrationsDir) ?: [], fn($f) => str_ends_with($f, '.sql'));
-                    sort($files);
-                    try {
-                        $applied = array_flip($pdo->query('SELECT migration FROM ' . jura_table('migrations') . ' ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
-                    } catch (Throwable) { $applied = []; }
-                    foreach ($files as $f) {
-                        if (isset($applied[$f])) continue;
-                        $sql = file_get_contents($migrationsDir . '/' . $f);
-                        try {
-                            $pdo->exec((string)$sql);
-                            $pdo->prepare('INSERT INTO ' . jura_table('migrations') . ' (migration,batch) VALUES (?,1)')->execute([$f]);
-                            $log .= "✓ {$f}\n"; $ran++;
-                        } catch (Throwable $e) { $log .= "✗ {$f}: " . $e->getMessage() . "\n"; }
-                    }
-                }
-                if ($ran > 0) {
-                    session_flash('upd_success', "Виконано міграцій: {$ran}\n{$log}");
-                } elseif ($log !== '') {
-                    session_flash('upd_error', "Помилки при виконанні:\n{$log}");
-                } else {
-                    session_flash('upd_success', 'Немає нових міграцій');
-                }
-                redirect('/admin/updates');
-            }
         }
 
         $errorLogFile = BASE_PATH . '/logs/php-error.log';
@@ -960,7 +960,7 @@ if (str_starts_with($path, '/admin')) {
             $lines = file($errorLogFile, FILE_IGNORE_NEW_LINES) ?: [];
             $errorLogTail = implode("\n", array_slice($lines, -100));
         }
-        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'pending_migrations' => $pendingMigrations, 'applied_migrations' => $appliedMigrations, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
+        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
         exit;
     }
 
@@ -1002,7 +1002,7 @@ if (str_starts_with($path, '/admin')) {
                 ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt, $defaultLocale]);
             $newPostId = (int) $pdo->lastInsertId();
             save_route($pdo, '/blog/' . $slug, 'post', $newPostId);
-            redirect('/admin/posts');
+            redirect(isset($_POST['_close']) ? '/admin/posts' : '/admin/posts/' . $newPostId . '/edit');
         }
         view_admin('post-edit', ['title' => 'Нова публікація', 'post' => []]);
         exit;
@@ -1049,7 +1049,7 @@ if (str_starts_with($path, '/admin')) {
             $routePrefix = $postLocale !== '' && $postLocale !== $defaultLocale ? '/' . $postLocale : '';
             $pdo->prepare('DELETE FROM ' . jura_table('routes') . " WHERE entity_type='post' AND entity_id=?")->execute([$id]);
             save_route($pdo, $routePrefix . '/blog/' . $slug, 'post', $id);
-            redirect('/admin/posts');
+            redirect(isset($_POST['_close']) ? '/admin/posts' : '/admin/posts/' . $id . '/edit');
         }
         if ($post) {
             $post['content'] = str_replace(['src="/userfiles/', "src='/userfiles/"], ['src="/public/userfiles/', "src='/public/userfiles/"], $post['content'] ?? '');
@@ -1204,22 +1204,26 @@ if ($route) {
             $common = ['locale' => $locale, 'translations' => $translations];
             if (($page['template'] ?? '') === 'blog') {
                 $perPage = max(1, (int)($settings['blog_per_page'] ?? 12));
-                $totalPostsStmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published' AND locale=?");
+                // Posts inserted directly (old migrations, manual SQL) can
+                // predate the locale column and sit at '' — treat those as
+                // belonging to every locale rather than vanishing from the
+                // blog until someone explicitly assigns them one.
+                $totalPostsStmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published' AND (locale=? OR locale='')");
                 $totalPostsStmt->execute([$locale]);
                 $totalPosts = (int) $totalPostsStmt->fetchColumn();
                 $totalPages = max(1, (int)ceil($totalPosts / $perPage));
                 $currentPage = max(1, min($totalPages, (int)($_GET['page'] ?? 1)));
                 $offset = ($currentPage - 1) * $perPage;
-                $posts = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND locale=? ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
+                $posts = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND (locale=? OR locale='') ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
                 $posts->execute([$locale]);
-                view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts->fetchAll(), 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common));
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts->fetchAll(), 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common)));
             } elseif (($page['template'] ?? '') === 'contacts') {
-                view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             } elseif (($page['template'] ?? '') === 'home') {
-                $homeExtra = ModuleLoader::hookCollect('home_data', $pdo);
-                view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra));
+                $homeExtra = ModuleLoader::hookCollect('home_data', $pdo, $locale);
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra)));
             } else {
-                view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             }
             exit;
         }
@@ -1230,11 +1234,11 @@ if ($route) {
         $post = $stmt->fetch();
         if ($post) {
             $locale = (string) ($route['locale'] ?? $post['locale'] ?? 'uk');
-            view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo), 'locale' => $locale, 'translations' => entity_translations($pdo, 'posts', $post)]);
+            frontend_render_cached($frontendCacheKey, fn() => view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo), 'locale' => $locale, 'translations' => entity_translations($pdo, 'posts', $post)]));
             exit;
         }
     }
 }
 
 http_response_code(404);
-view_frontend('404', ['title' => '404', 'settings' => cms_settings($pdo)]);
+frontend_render_cached($frontendCacheKey, fn() => view_frontend('404', ['title' => '404', 'settings' => cms_settings($pdo)]));

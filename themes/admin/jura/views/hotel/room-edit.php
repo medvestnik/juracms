@@ -188,6 +188,15 @@ foreach ($roomImages as $img) {
           <?php endforeach; ?>
         </select>
       </div>
+      <div>
+        <label class="jura-label">Мова</label>
+        <select class="jura-input" name="locale" style="max-width:200px">
+          <option value="" <?= empty($r['locale']) ? 'selected' : '' ?>>Всі мови</option>
+          <?php foreach (($all_locales ?? []) as $l): ?>
+            <option value="<?= e($l['code']) ?>" <?= ($r['locale'] ?? '') === $l['code'] ? 'selected' : '' ?>><?= e($l['native_name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
       <div style="margin-top:1.4rem">
         <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
           <input type="checkbox" name="show_similar_rooms" value="1" <?= ($r['show_similar_rooms'] ?? 1) ? 'checked' : '' ?>>

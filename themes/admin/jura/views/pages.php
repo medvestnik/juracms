@@ -100,6 +100,7 @@
 
     <div style="margin-top:1.5rem">
       <button class="jura-btn jura-btn-primary" type="submit">Зберегти</button>
+      <button class="jura-btn jura-btn-secondary" type="submit" name="_close" value="1">Зберегти і вийти</button>
       <a class="jura-btn jura-btn-secondary" href="/admin/pages">Скасувати</a>
     </div>
   </form>

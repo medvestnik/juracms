@@ -99,6 +99,13 @@ button[disabled]{opacity:.6;cursor:default}
     <input type="hidden" name="install_action" value="install-run">
     <p>Готово к установке полного CMS-скелета.</p>
     <label style="display:flex;align-items:flex-start;gap:.5rem;margin:1rem 0">
+      <input type="checkbox" name="install_demo_data" value="1" checked style="width:auto;flex:0 0 auto;margin-top:.2rem">
+      <span style="display:block">
+        <strong>Установить демо-данные.</strong><br>
+        Добавит несколько примеров записей в блог, чтобы сразу увидеть, как выглядит сайт с контентом. Снимите галочку для чистой установки без примеров.
+      </span>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:.5rem;margin:1rem 0">
       <input type="checkbox" name="clean_install" value="1" style="width:auto;flex:0 0 auto;margin-top:.2rem">
       <span style="display:block">
         <strong>Очистить базу данных перед установкой.</strong><br>
