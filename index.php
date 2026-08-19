@@ -554,7 +554,7 @@ if (str_starts_with($path, '/admin')) {
         $stmt->execute([(int) $_SESSION['admin_user_id'], $_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $status, $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $defaultLocale, $status]);
         $id = (int) $pdo->lastInsertId();
         save_route($pdo, $route, 'page', $id);
-        redirect('/admin/pages');
+        redirect(isset($_POST['_close']) ? '/admin/pages' : '/admin/pages/' . $id . '/edit');
     }
     if (preg_match('#^/admin/pages/(\d+)/edit$#', $path, $matches) && $method === 'GET') {
         $stmt = $pdo->prepare('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id WHERE p.id=?");
@@ -603,7 +603,7 @@ if (str_starts_with($path, '/admin')) {
             ->execute([$_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $_POST['status'] ?? 'draft', $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $_POST['status'] ?? 'draft', $id]);
         $pdo->prepare('DELETE FROM ' . jura_table('routes') . " WHERE entity_type='page' AND entity_id=?")->execute([$id]);
         save_route($pdo, $route, 'page', $id);
-        redirect('/admin/pages');
+        redirect(isset($_POST['_close']) ? '/admin/pages' : '/admin/pages/' . $id . '/edit');
     }
     if (preg_match('#^/admin/pages/(\d+)/delete$#', $path, $matches) && $method === 'POST') {
         $id = (int) $matches[1];
@@ -1015,7 +1015,7 @@ if (str_starts_with($path, '/admin')) {
                 ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt, $defaultLocale]);
             $newPostId = (int) $pdo->lastInsertId();
             save_route($pdo, '/blog/' . $slug, 'post', $newPostId);
-            redirect('/admin/posts');
+            redirect(isset($_POST['_close']) ? '/admin/posts' : '/admin/posts/' . $newPostId . '/edit');
         }
         view_admin('post-edit', ['title' => 'Нова публікація', 'post' => []]);
         exit;
@@ -1062,7 +1062,7 @@ if (str_starts_with($path, '/admin')) {
             $routePrefix = $postLocale !== '' && $postLocale !== $defaultLocale ? '/' . $postLocale : '';
             $pdo->prepare('DELETE FROM ' . jura_table('routes') . " WHERE entity_type='post' AND entity_id=?")->execute([$id]);
             save_route($pdo, $routePrefix . '/blog/' . $slug, 'post', $id);
-            redirect('/admin/posts');
+            redirect(isset($_POST['_close']) ? '/admin/posts' : '/admin/posts/' . $id . '/edit');
         }
         if ($post) {
             $post['content'] = str_replace(['src="/userfiles/', "src='/userfiles/"], ['src="/public/userfiles/', "src='/public/userfiles/"], $post['content'] ?? '');
