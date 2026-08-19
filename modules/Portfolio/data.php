@@ -23,6 +23,12 @@ function portfolio_module_ensure_schema(PDO $pdo): void
         }
         portfolio_module_insert_missing_rows($pdo);
     }
+    // Empty locale = shown for every locale (matches the fallback used for
+    // pages/posts/hotel content) -- existing items keep showing up without
+    // an admin having to tag them.
+    if (!$pdo->query("SHOW COLUMNS FROM {$table} LIKE 'locale'")->fetch()) {
+        $pdo->exec("ALTER TABLE {$table} ADD locale VARCHAR(16) NOT NULL DEFAULT '' AFTER featured_home");
+    }
 }
 
 function portfolio_module_insert_missing_rows(PDO $pdo): void

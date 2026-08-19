@@ -7,12 +7,12 @@ use App\Core\ModuleLoader;
 use App\Core\Theme;
 
 if (!function_exists('portfolio_module_items')) {
-    function portfolio_module_items(PDO $pdo, string $kind, bool $homepageOnly = false): array
+    function portfolio_module_items(PDO $pdo, string $kind, bool $homepageOnly = false, string $locale = ''): array
     {
         try {
             $homepage = $homepageOnly ? ' AND featured_home=1' : '';
-            $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('portfolio_items') . " WHERE kind=? AND status='published'{$homepage} ORDER BY sort_order,id");
-            $stmt->execute([$kind]);
+            $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('portfolio_items') . " WHERE kind=? AND status='published' AND (locale=? OR locale=''){$homepage} ORDER BY sort_order,id");
+            $stmt->execute([$kind, $locale]);
             return $stmt->fetchAll();
         } catch (Throwable) {
             return [];
@@ -52,6 +52,7 @@ ModuleLoader::register('portfolio', [
             color VARCHAR(30) NOT NULL DEFAULT 'ink',
             status ENUM('published','draft') NOT NULL DEFAULT 'published',
             featured_home TINYINT(1) NOT NULL DEFAULT 0,
+            locale VARCHAR(16) NOT NULL DEFAULT '',
             sort_order INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -75,13 +76,13 @@ ModuleLoader::register('portfolio', [
             if (($_POST['action'] ?? '') === 'delete') {
                 $pdo->prepare('DELETE FROM ' . jura_table('portfolio_items') . ' WHERE id=? AND kind=?')->execute([(int) $_POST['id'], $kind]);
             } else {
-                $values = [$kind, trim((string)$_POST['title']), trim((string)$_POST['category']), trim((string)$_POST['description']), trim((string)$_POST['url']), trim((string)$_POST['link_label']), trim((string)($_POST['status_label'] ?? '')), preg_replace('/[^a-z-]/', '', (string)$_POST['color']), isset($_POST['published']) ? 'published' : 'draft', isset($_POST['featured_home']) ? 1 : 0, (int)($_POST['sort_order'] ?? 0)];
+                $values = [$kind, trim((string)$_POST['title']), trim((string)$_POST['category']), trim((string)$_POST['description']), trim((string)$_POST['url']), trim((string)$_POST['link_label']), trim((string)($_POST['status_label'] ?? '')), preg_replace('/[^a-z-]/', '', (string)$_POST['color']), isset($_POST['published']) ? 'published' : 'draft', isset($_POST['featured_home']) ? 1 : 0, (string)($_POST['locale'] ?? ''), (int)($_POST['sort_order'] ?? 0)];
                 $id = (int) ($_POST['id'] ?? 0);
                 if ($id) {
                     $values[] = $id;
-                    $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET kind=?,title=?,category=?,description=?,url=?,link_label=?,status_label=?,color=?,status=?,featured_home=?,sort_order=? WHERE id=?')->execute($values);
+                    $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET kind=?,title=?,category=?,description=?,url=?,link_label=?,status_label=?,color=?,status=?,featured_home=?,locale=?,sort_order=? WHERE id=?')->execute($values);
                 } else {
-                    $pdo->prepare('INSERT INTO ' . jura_table('portfolio_items') . ' (kind,title,category,description,url,link_label,status_label,color,status,featured_home,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)')->execute($values);
+                    $pdo->prepare('INSERT INTO ' . jura_table('portfolio_items') . ' (kind,title,category,description,url,link_label,status_label,color,status,featured_home,locale,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute($values);
                 }
             }
             redirect($base);
@@ -92,7 +93,8 @@ ModuleLoader::register('portfolio', [
                 $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('portfolio_items') . ' WHERE id=? AND kind=?');
                 $stmt->execute([(int)$segment, $kind]); $item = $stmt->fetch() ?: [];
             }
-            $render('admin', 'editor', ['title' => ($item ? 'Редагувати' : 'Додати') . ($kind === 'project' ? ' проєкт' : ' портфоліо'), 'item'=>$item, 'kind'=>$kind, 'base'=>$base]);
+            $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+            $render('admin', 'editor', ['title' => ($item ? 'Редагувати' : 'Додати') . ($kind === 'project' ? ' проєкт' : ' портфоліо'), 'item'=>$item, 'kind'=>$kind, 'base'=>$base, 'all_locales'=>$allLocales]);
         } else {
             $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('portfolio_items') . ' WHERE kind=? ORDER BY sort_order,id'); $stmt->execute([$kind]);
             $render('admin', 'index', ['title'=>$kind === 'project' ? 'Проєкти' : 'Портфоліо', 'items'=>$stmt->fetchAll(), 'kind'=>$kind, 'base'=>$base]);
@@ -100,9 +102,15 @@ ModuleLoader::register('portfolio', [
         return true;
     },
     'handle_frontend' => static function (string $path, PDO $pdo) use ($render): bool {
+        // current_locale() is defined earlier in index.php and already
+        // loaded by the time module hooks run -- strip the /en, /ru style
+        // prefix the same way core page/post routing does.
+        [$locale, $path] = current_locale($pdo, $path);
         if (!in_array($path, ['/portfolio','/projects'], true)) return false;
         $kind = $path === '/projects' ? 'project' : 'portfolio';
-        $render('frontend', 'catalog', ['title'=>$kind === 'project' ? 'Проекты' : 'Портфолио', 'meta_description'=>$kind === 'project' ? 'Собственные цифровые проекты Николая Овчинникова.' : 'Сайты и цифровые продукты в портфолио Николая Овчинникова.', 'kind'=>$kind, 'items'=>portfolio_module_items($pdo,$kind), 'settings'=>cms_settings($pdo)]);
+        $settings = cms_settings($pdo);
+        $siteName = $settings['site_name'] ?? '';
+        $render('frontend', 'catalog', ['title'=>$kind === 'project' ? 'Проєкти' : 'Портфоліо', 'meta_description'=>$kind === 'project' ? trim('Власні цифрові проєкти ' . $siteName) : trim('Роботи в портфоліо ' . $siteName), 'kind'=>$kind, 'items'=>portfolio_module_items($pdo,$kind,false,$locale), 'settings'=>$settings, 'locale'=>$locale]);
         return true;
     },
 ]);
