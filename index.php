@@ -51,7 +51,7 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
-const CMS_SCHEMA_VERSION = '2';
+const CMS_SCHEMA_VERSION = '3';
 
 function ensure_cms_schema(PDO $pdo): void
 {
@@ -141,14 +141,23 @@ function ensure_cms_schema(PDO $pdo): void
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?)')
             ->execute([$key, $value, 'string', $group]);
     }
-    foreach ([['uk', 'Ukrainian', 'Українська', 1, 1], ['ru', 'Russian', 'Русский', 0, 2], ['en', 'English', 'English', 0, 3]] as $locale) {
+    // default_locale (settings) is the authoritative "what locale is this
+    // site in" value — the installer can set it to anything (e.g. 'ru').
+    // jura_locales.is_default must always agree with it; seed new rows
+    // against it (not a hardcoded 'uk') and reconcile existing rows every
+    // time this runs, since a mismatch here means current_locale()
+    // resolves a different locale than the content was backfilled onto
+    // below, silently emptying every locale-filtered listing (e.g. /blog).
+    $defaultLocale = (string) setting_value($pdo, 'default_locale', 'uk');
+    foreach ([['uk', 'Ukrainian', 'Українська', 1], ['ru', 'Russian', 'Русский', 2], ['en', 'English', 'English', 3]] as [$code, $name, $native, $sort]) {
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('locales') . ' (code,name,native_name,is_default,sort_order) VALUES (?,?,?,?,?)')
-            ->execute($locale);
+            ->execute([$code, $name, $native, $code === $defaultLocale ? 1 : 0, $sort]);
     }
+    $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET is_default=(code=?)')->execute([$defaultLocale]);
+
     // Existing pages/posts predate the locale column — backfill them onto
     // the site's default locale rather than leaving it blank, so they keep
     // rendering exactly as before until an admin adds real translations.
-    $defaultLocale = (string) setting_value($pdo, 'default_locale', 'uk');
     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
     $pdo->prepare('UPDATE ' . jura_table('posts') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
 
@@ -1204,13 +1213,17 @@ if ($route) {
             $common = ['locale' => $locale, 'translations' => $translations];
             if (($page['template'] ?? '') === 'blog') {
                 $perPage = max(1, (int)($settings['blog_per_page'] ?? 12));
-                $totalPostsStmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published' AND locale=?");
+                // Posts inserted directly (old migrations, manual SQL) can
+                // predate the locale column and sit at '' — treat those as
+                // belonging to every locale rather than vanishing from the
+                // blog until someone explicitly assigns them one.
+                $totalPostsStmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published' AND (locale=? OR locale='')");
                 $totalPostsStmt->execute([$locale]);
                 $totalPosts = (int) $totalPostsStmt->fetchColumn();
                 $totalPages = max(1, (int)ceil($totalPosts / $perPage));
                 $currentPage = max(1, min($totalPages, (int)($_GET['page'] ?? 1)));
                 $offset = ($currentPage - 1) * $perPage;
-                $posts = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND locale=? ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
+                $posts = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND (locale=? OR locale='') ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
                 $posts->execute([$locale]);
                 view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts->fetchAll(), 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common));
             } elseif (($page['template'] ?? '') === 'contacts') {
