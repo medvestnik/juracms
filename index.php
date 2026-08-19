@@ -585,7 +585,11 @@ if (str_starts_with($path, '/admin')) {
                 $ins = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,sort_order,locale,translation_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
                 $ins->execute([(int) $_SESSION['admin_user_id'], $source['title'], $source['slug'], '', $source['excerpt'], 'draft', $source['template'], '', '', '', $source['sort_order'], $locale, $rootId]);
                 $newId = (int) $pdo->lastInsertId();
-                save_route($pdo, '/' . $locale . '/' . $source['slug'], 'page', $newId);
+                // The home page's translation gets its locale's root URL
+                // (/en) rather than /en/home -- home is always "/" in the
+                // default locale, so its translations follow the same rule.
+                $routePath = $source['template'] === 'home' ? '/' . $locale : '/' . $locale . '/' . $source['slug'];
+                save_route($pdo, $routePath, 'page', $newId);
             }
             redirect('/admin/pages/' . $newId . '/edit');
         }
