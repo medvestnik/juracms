@@ -1,0 +1,7 @@
+{
+  "slug": "hotel",
+  "name": "Hotel Module",
+  "version": "1.0.0",
+  "description": "Управління номерами, акціями, галереями та заявками для готелю",
+  "detect_table": "hotel_rooms"
+}

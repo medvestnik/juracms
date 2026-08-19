@@ -14,10 +14,10 @@ $mapEmbed = trim((string) ($settings['google_maps_embed'] ?? ''));
         <?php endif; ?>
 
         <ul class="contact-list">
-          <?php if (!empty($settings['contact_phone'])): ?>
+          <?php if (!empty($settings['contact_phone']) && ($settings['show_phone'] ?? '1') !== '0'): ?>
           <li><span class="label">Телефон</span> <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', (string) $settings['contact_phone'])) ?>"><?= e($settings['contact_phone']) ?></a></li>
           <?php endif; ?>
-          <?php if (!empty($settings['contact_phone2'])): ?>
+          <?php if (!empty($settings['contact_phone2']) && ($settings['show_phone'] ?? '1') !== '0'): ?>
           <li><span class="label">Телефон 2</span> <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', (string) $settings['contact_phone2'])) ?>"><?= e($settings['contact_phone2']) ?></a></li>
           <?php endif; ?>
           <?php if (!empty($settings['contact_email'])): ?>

@@ -6,6 +6,26 @@ $formAction = $isCreate ? '/admin/posts/create' : '/admin/posts/' . $id . '/edit
 $categories = $categories ?? [];
 $featuredImg = !empty($p['featured_image']) ? '/public/userfiles/posts/' . $p['featured_image'] : null;
 ?>
+<?php if (!$isCreate): $translations = $translations ?? []; $allLocales = $all_locales ?? []; ?>
+<section class="jura-card" style="margin-bottom:1rem">
+  <h2 style="margin-top:0">Переклади</h2>
+  <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+    <?php foreach ($allLocales as $l): $code = $l['code']; $t = $translations[$code] ?? null; ?>
+      <?php if ($t): ?>
+      <a class="jura-btn <?= (int) $t['id'] === $id ? 'jura-btn-primary' : 'jura-btn-secondary' ?>" style="font-size:.85rem"
+        href="/admin/posts/<?= (int) $t['id'] ?>/edit"><?= e($l['native_name']) ?> (<?= e($code) ?>)<?= (int) $t['id'] === $id ? ' — поточна' : '' ?></a>
+      <?php else: ?>
+      <form method="post" action="/admin/posts/<?= $id ?>/translate" style="margin:0">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="locale" value="<?= e($code) ?>">
+        <button class="jura-btn" type="submit" style="font-size:.85rem;background:#f8fafc;color:#475569;border:1px dashed #cbd5e1">+ <?= e($l['native_name']) ?> (<?= e($code) ?>)</button>
+      </form>
+      <?php endif; ?>
+    <?php endforeach; ?>
+  </div>
+</section>
+<?php endif; ?>
+
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;gap:1rem;flex-wrap:wrap">
   <a href="/admin/posts" class="jura-btn jura-btn-secondary">&larr; Назад</a>
   <div style="display:flex;gap:.6rem">

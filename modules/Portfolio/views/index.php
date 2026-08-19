@@ -1,0 +1,6 @@
+<div style="display:flex;justify-content:flex-end;margin-bottom:1rem"><a class="jura-btn jura-btn-primary" href="<?= e($base) ?>/create">+ <?= $kind === 'project' ? 'Додати проєкт' : 'Додати портфоліо' ?></a></div>
+<section class="jura-card" style="overflow:auto">
+<?php if (!$items): ?><p style="color:#888">Записів ще немає.</p><?php else: ?>
+<table class="jura-table"><thead><tr><th>Назва</th><th>Категорія</th><th>Статус</th><th>На главной</th><th>Порядок</th><th>Дії</th></tr></thead><tbody>
+<?php foreach ($items as $item): ?><tr><td><strong><?= e($item['title']) ?></strong></td><td><?= e($item['category']) ?></td><td><?= $item['status']==='published'?'✓ Опубліковано':'Чернетка' ?></td><td><?= !empty($item['featured_home'])?'✓ Так':'—' ?></td><td><?= (int)$item['sort_order'] ?></td><td style="display:flex;gap:.4rem"><a class="jura-btn jura-btn-secondary" href="<?= e($base) ?>/<?= (int)$item['id'] ?>/edit">Редагувати</a><form method="post" style="margin:0" onsubmit="return confirm('Видалити запис?')"><input type="hidden" name="_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$item['id'] ?>"><button class="jura-btn" style="color:#9f1239" type="submit">✕</button></form></td></tr><?php endforeach; ?>
+</tbody></table><?php endif; ?></section>

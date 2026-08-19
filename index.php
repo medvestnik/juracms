@@ -51,7 +51,7 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
-const CMS_SCHEMA_VERSION = '1';
+const CMS_SCHEMA_VERSION = '2';
 
 function ensure_cms_schema(PDO $pdo): void
 {
@@ -90,6 +90,10 @@ function ensure_cms_schema(PDO $pdo): void
         ['redirects', 'last_hit_at', 'TIMESTAMP NULL'],
         ['media_files', 'folder', 'VARCHAR(191) NULL'],
         ['users', 'role', "VARCHAR(40) NOT NULL DEFAULT 'admin'"],
+        ['pages', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
+        ['pages', 'translation_of', 'INT UNSIGNED NULL'],
+        ['posts', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
+        ['posts', 'translation_of', 'INT UNSIGNED NULL'],
     ] as [$table, $column, $definition]) {
         $tableName = str_replace('`', '', jura_table($table));
         $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}` LIKE " . $pdo->quote($column));
@@ -141,6 +145,12 @@ function ensure_cms_schema(PDO $pdo): void
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('locales') . ' (code,name,native_name,is_default,sort_order) VALUES (?,?,?,?,?)')
             ->execute($locale);
     }
+    // Existing pages/posts predate the locale column — backfill them onto
+    // the site's default locale rather than leaving it blank, so they keep
+    // rendering exactly as before until an admin adds real translations.
+    $defaultLocale = (string) setting_value($pdo, 'default_locale', 'uk');
+    $pdo->prepare('UPDATE ' . jura_table('pages') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
+    $pdo->prepare('UPDATE ' . jura_table('posts') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
 
     $dir = dirname($marker);
     if (!is_dir($dir)) {
@@ -150,11 +160,32 @@ function ensure_cms_schema(PDO $pdo): void
     $ensuredThisRequest = true;
 }
 
-function current_locale(PDO $pdo, string $path): array
+/** Active locale codes ordered for display, and the default locale code.
+ * jura_locales is the source of truth; the default_locale/active_locales
+ * settings are kept in sync (by the /admin/locales page) purely as a
+ * cheap fallback in case that table is ever empty. */
+function active_locales(PDO $pdo): array
 {
+    try {
+        $rows = $pdo->query('SELECT code,is_default FROM ' . jura_table('locales') . ' WHERE is_active=1 ORDER BY sort_order,id')->fetchAll();
+    } catch (\Throwable) {
+        $rows = [];
+    }
+    if ($rows) {
+        $codes = array_column($rows, 'code');
+        $defaultRow = current(array_filter($rows, fn($r) => (int) $r['is_default'] === 1));
+        $default = $defaultRow ? (string) $defaultRow['code'] : (string) $codes[0];
+        return [$codes, $default];
+    }
     $settings = cms_settings($pdo);
     $default = (string) ($settings['default_locale'] ?? 'uk');
-    $active = array_filter(array_map('trim', explode(',', (string) ($settings['active_locales'] ?? $default))));
+    $active = array_values(array_filter(array_map('trim', explode(',', (string) ($settings['active_locales'] ?? $default)))));
+    return [$active ?: [$default], $default];
+}
+
+function current_locale(PDO $pdo, string $path): array
+{
+    [$active, $default] = active_locales($pdo);
     $segments = array_values(array_filter(explode('/', trim($path, '/'))));
     $prefix = $segments[0] ?? '';
     if (in_array($prefix, $active, true)) {
@@ -178,6 +209,35 @@ function frontend_route(PDO $pdo, string $path): ?array
         }
     }
     return null;
+}
+
+/**
+ * All translations of a page/post, keyed by locale code — including the
+ * row itself. Used to render a language switcher and to drive the admin
+ * "Translations" panel. $table is 'pages' or 'posts'; $row must have
+ * id, locale, translation_of.
+ */
+function entity_translations(PDO $pdo, string $table, array $row): array
+{
+    $rootId = (int) ($row['translation_of'] ?: $row['id']);
+    $entityType = rtrim($table, 's'); // 'pages' -> 'page', 'posts' -> 'post'
+    $stmt = $pdo->prepare(
+        'SELECT e.id,e.locale,e.title,r.path route_path FROM ' . jura_table($table) . ' e '
+        . 'LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type=? AND r.entity_id=e.id "
+        . 'WHERE e.id=? OR e.translation_of=?'
+    );
+    $stmt->execute([$entityType, $rootId, $rootId]);
+    $out = [];
+    foreach ($stmt->fetchAll() as $t) {
+        $out[(string) $t['locale']] = $t;
+    }
+    return $out;
+}
+
+/** The default-locale-most page/post id a translation belongs to (itself if it has no translation_of). */
+function translation_root_id(array $row): int
+{
+    return (int) ($row['translation_of'] ?: $row['id']);
 }
 
 function find_redirect(PDO $pdo, string $path): ?array
@@ -244,7 +304,7 @@ function admin_stats(PDO $pdo): array
         try { $stats[$table] = (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table($table))->fetchColumn(); } catch (\Throwable $e) { $stats[$table] = 0; }
     }
     try { $stats['leads'] = (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table('form_submissions'))->fetchColumn(); } catch (\Throwable $e) { $stats['leads'] = 0; }
-    return $stats;
+    return array_merge($stats, ModuleLoader::hookCollect('admin_stats', $pdo));
 }
 
 function save_route(PDO $pdo, string $path, string $entityType, int $entityId): void
@@ -362,7 +422,7 @@ if (str_starts_with($path, '/admin')) {
         if ($method === 'POST') {
             foreach ($_POST['settings'] ?? [] as $key => $value) {
                 $group = str_contains((string) $key, 'locale') ? 'localization' : 'system';
-                if (str_starts_with((string) $key, 'contact_') || str_starts_with((string) $key, 'social_') || (string) $key === 'contact_address') {
+                if (str_starts_with((string) $key, 'contact_') || str_starts_with((string) $key, 'social_') || (string) $key === 'contact_address' || (string) $key === 'show_phone') {
                     $group = 'contacts';
                 }
                 if (in_array((string) $key, ['google_maps_embed', 'gtm_id', 'ga4_id', 'google_ads_id', 'fb_pixel_id', 'fb_access_token'], true)) {
@@ -389,6 +449,9 @@ if (str_starts_with($path, '/admin')) {
             // Checkboxes not sent when unchecked — save explicit 0
             if (!isset($_POST['settings']['admin_dark_mode'])) {
                 save_setting($pdo, 'admin_dark_mode', '0', 'system');
+            }
+            if (!isset($_POST['settings']['show_phone'])) {
+                save_setting($pdo, 'show_phone', '0', 'contacts');
             }
             session_flash('success', 'Settings saved.');
             redirect('/admin/settings');
@@ -477,8 +540,9 @@ if (str_starts_with($path, '/admin')) {
         if ($route === '/home') {
             $route = '/';
         }
-        $stmt = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,canonical_path,og_title,og_description,sort_order,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?="published" THEN NOW() ELSE NULL END)');
-        $stmt->execute([(int) $_SESSION['admin_user_id'], $_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $status, $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $status]);
+        [, $defaultLocale] = active_locales($pdo);
+        $stmt = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,canonical_path,og_title,og_description,sort_order,locale,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?="published" THEN NOW() ELSE NULL END)');
+        $stmt->execute([(int) $_SESSION['admin_user_id'], $_POST['title'], $slug, $_POST['content'] ?? '', $_POST['excerpt'] ?? '', $status, $_POST['template'] ?? 'page', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $_POST['meta_keywords'] ?? '', $_POST['canonical_path'] ?? '', $_POST['og_title'] ?? '', $_POST['og_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), $defaultLocale, $status]);
         $id = (int) $pdo->lastInsertId();
         save_route($pdo, $route, 'page', $id);
         redirect('/admin/pages');
@@ -486,8 +550,37 @@ if (str_starts_with($path, '/admin')) {
     if (preg_match('#^/admin/pages/(\d+)/edit$#', $path, $matches) && $method === 'GET') {
         $stmt = $pdo->prepare('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id WHERE p.id=?");
         $stmt->execute([(int) $matches[1]]);
-        view_admin('pages', ['title' => 'Редагувати сторінку', 'edit' => $stmt->fetch() ?: []]);
+        $editPage = $stmt->fetch() ?: [];
+        [$activeCodes] = $editPage ? active_locales($pdo) : [[]];
+        $localeRows = $editPage ? $pdo->query('SELECT code,name,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll() : [];
+        view_admin('pages', [
+            'title' => 'Редагувати сторінку',
+            'edit' => $editPage,
+            'translations' => $editPage ? entity_translations($pdo, 'pages', $editPage) : [],
+            'all_locales' => $localeRows,
+        ]);
         exit;
+    }
+    if (preg_match('#^/admin/pages/(\d+)/translate$#', $path, $matches) && $method === 'POST') {
+        $sourceId = (int) $matches[1];
+        $locale = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($_POST['locale'] ?? '')));
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('pages') . ' WHERE id=?');
+        $stmt->execute([$sourceId]);
+        $source = $stmt->fetch();
+        if ($source && $locale !== '') {
+            $rootId = translation_root_id($source);
+            $existing = $pdo->prepare('SELECT id FROM ' . jura_table('pages') . ' WHERE (id=? OR translation_of=?) AND locale=?');
+            $existing->execute([$rootId, $rootId, $locale]);
+            $newId = (int) $existing->fetchColumn();
+            if (!$newId) {
+                $ins = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,excerpt,status,template,meta_title,meta_description,meta_keywords,sort_order,locale,translation_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                $ins->execute([(int) $_SESSION['admin_user_id'], $source['title'], $source['slug'], '', $source['excerpt'], 'draft', $source['template'], '', '', '', $source['sort_order'], $locale, $rootId]);
+                $newId = (int) $pdo->lastInsertId();
+                save_route($pdo, '/' . $locale . '/' . $source['slug'], 'page', $newId);
+            }
+            redirect('/admin/pages/' . $newId . '/edit');
+        }
+        redirect('/admin/pages/' . $sourceId . '/edit');
     }
     if (preg_match('#^/admin/pages/(\d+)$#', $path, $matches) && $method === 'POST') {
         $id = (int) $matches[1];
@@ -581,10 +674,55 @@ if (str_starts_with($path, '/admin')) {
                 ModuleLoader::install($slug, $pdo);
             } elseif ($slug && ($_POST['action'] ?? '') === 'uninstall') {
                 ModuleLoader::uninstall($slug, $pdo);
+            } elseif ($slug && ($_POST['action'] ?? '') === 'enable') {
+                ModuleLoader::toggle($slug, true, $pdo);
+            } elseif ($slug && ($_POST['action'] ?? '') === 'disable') {
+                ModuleLoader::toggle($slug, false, $pdo);
             }
             redirect('/admin/modules');
         }
         view_admin('modules', ['title' => 'Модулі', 'modules' => ModuleLoader::available($pdo)]);
+        exit;
+    }
+
+    if ($path === '/admin/locales') {
+        if ($method === 'POST') {
+            $action = (string) ($_POST['action'] ?? '');
+            if ($action === 'create') {
+                $code = strtolower(trim((string) ($_POST['code'] ?? '')));
+                if ($code !== '') {
+                    $pdo->prepare('INSERT IGNORE INTO ' . jura_table('locales') . ' (code,name,native_name,sort_order) VALUES (?,?,?,?)')
+                        ->execute([$code, trim((string) ($_POST['name'] ?? '')), trim((string) ($_POST['native_name'] ?? '')), (int) ($_POST['sort_order'] ?? 0)]);
+                }
+            } elseif ($action === 'update') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET name=?,native_name=?,sort_order=?,is_active=? WHERE id=?')
+                    ->execute([trim((string) ($_POST['name'] ?? '')), trim((string) ($_POST['native_name'] ?? '')), (int) ($_POST['sort_order'] ?? 0), isset($_POST['is_active']) ? 1 : 0, $id]);
+            } elseif ($action === 'set_default') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET is_default=0')->execute();
+                $pdo->prepare('UPDATE ' . jura_table('locales') . ' SET is_default=1,is_active=1 WHERE id=?')->execute([$id]);
+                $code = $pdo->prepare('SELECT code FROM ' . jura_table('locales') . ' WHERE id=?');
+                $code->execute([$id]);
+                if ($c = $code->fetchColumn()) {
+                    save_setting($pdo, 'default_locale', (string) $c, 'localization');
+                }
+            } elseif ($action === 'delete') {
+                $id = (int) ($_POST['id'] ?? 0);
+                $row = $pdo->prepare('SELECT is_default FROM ' . jura_table('locales') . ' WHERE id=?');
+                $row->execute([$id]);
+                if ((int) $row->fetchColumn() !== 1) {
+                    $pdo->prepare('DELETE FROM ' . jura_table('locales') . ' WHERE id=?')->execute([$id]);
+                } else {
+                    session_flash('error', 'Не можна видалити мову за замовчуванням.');
+                }
+            }
+            [$activeCodes] = active_locales($pdo);
+            save_setting($pdo, 'active_locales', implode(',', $activeCodes), 'localization');
+            redirect('/admin/locales');
+        }
+        $locales = $pdo->query('SELECT * FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        view_admin('locales', ['title' => 'Мови сайту', 'locales' => $locales, 'flash_error' => session_flash('error')]);
         exit;
     }
 
@@ -859,12 +997,39 @@ if (str_starts_with($path, '/admin')) {
             $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
             $status = (string) ($_POST['status'] ?? 'draft');
             $publishedAt = !empty($_POST['published_at']) ? $_POST['published_at'] : ($status === 'published' ? date('Y-m-d H:i:s') : null);
-            $pdo->prepare('INSERT INTO ' . jura_table('posts') . ' (slug,title,excerpt,content,status,meta_title,meta_description,published_at) VALUES (?,?,?,?,?,?,?,?)')
-                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt]);
+            [, $defaultLocale] = active_locales($pdo);
+            $pdo->prepare('INSERT INTO ' . jura_table('posts') . ' (slug,title,excerpt,content,status,meta_title,meta_description,published_at,locale) VALUES (?,?,?,?,?,?,?,?,?)')
+                ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt, $defaultLocale]);
+            $newPostId = (int) $pdo->lastInsertId();
+            save_route($pdo, '/blog/' . $slug, 'post', $newPostId);
             redirect('/admin/posts');
         }
         view_admin('post-edit', ['title' => 'Нова публікація', 'post' => []]);
         exit;
+    }
+
+    if (preg_match('#^/admin/posts/(\d+)/translate$#', $path, $matches) && $method === 'POST') {
+        $sourceId = (int) $matches[1];
+        $locale = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($_POST['locale'] ?? '')));
+        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . ' WHERE id=?');
+        $stmt->execute([$sourceId]);
+        $source = $stmt->fetch();
+        if ($source && $locale !== '') {
+            $rootId = translation_root_id($source);
+            $existing = $pdo->prepare('SELECT id FROM ' . jura_table('posts') . ' WHERE (id=? OR translation_of=?) AND locale=?');
+            $existing->execute([$rootId, $rootId, $locale]);
+            $newId = (int) $existing->fetchColumn();
+            if (!$newId) {
+                $ins = $pdo->prepare('INSERT INTO ' . jura_table('posts') . ' (slug,title,excerpt,content,status,meta_title,meta_description,locale,translation_of) VALUES (?,?,?,?,?,?,?,?,?)');
+                $ins->execute([$source['slug'], $source['title'], $source['excerpt'], '', 'draft', '', '', $locale, $rootId]);
+                $newId = (int) $pdo->lastInsertId();
+                [, $defaultLocale] = active_locales($pdo);
+                $routePrefix = $locale !== $defaultLocale ? '/' . $locale : '';
+                save_route($pdo, $routePrefix . '/blog/' . $source['slug'], 'post', $newId);
+            }
+            redirect('/admin/posts/' . $newId . '/edit');
+        }
+        redirect('/admin/posts/' . $sourceId . '/edit');
     }
 
     if (preg_match('#^/admin/posts/(\d+)/edit$#', $path, $matches)) {
@@ -879,12 +1044,22 @@ if (str_starts_with($path, '/admin')) {
             $featuredImage = $post['featured_image'] ?? null;
             $pdo->prepare('UPDATE ' . jura_table('posts') . ' SET slug=?,title=?,excerpt=?,content=?,status=?,meta_title=?,meta_description=?,published_at=?,featured_image=?,updated_at=NOW() WHERE id=?')
                 ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt, $featuredImage, $id]);
+            [, $defaultLocale] = active_locales($pdo);
+            $postLocale = (string) ($post['locale'] ?? $defaultLocale);
+            $routePrefix = $postLocale !== '' && $postLocale !== $defaultLocale ? '/' . $postLocale : '';
+            $pdo->prepare('DELETE FROM ' . jura_table('routes') . " WHERE entity_type='post' AND entity_id=?")->execute([$id]);
+            save_route($pdo, $routePrefix . '/blog/' . $slug, 'post', $id);
             redirect('/admin/posts');
         }
         if ($post) {
             $post['content'] = str_replace(['src="/userfiles/', "src='/userfiles/"], ['src="/public/userfiles/', "src='/public/userfiles/"], $post['content'] ?? '');
         }
-        view_admin('post-edit', ['title' => 'Редагувати публікацію', 'post' => $post]);
+        view_admin('post-edit', [
+            'title' => 'Редагувати публікацію',
+            'post' => $post,
+            'translations' => $post ? entity_translations($pdo, 'posts', $post) : [],
+            'all_locales' => $post ? $pdo->query('SELECT code,name,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll() : [],
+        ]);
         exit;
     }
 
@@ -1023,20 +1198,28 @@ if ($route) {
         $page = $stmt->fetch();
         if ($page) {
             $settings = cms_settings($pdo);
+            $page['content'] = ModuleLoader::hookFilter('filter_page_content', $page['content'] ?? '', $settings);
+            $locale = (string) ($route['locale'] ?? $page['locale'] ?? $settings['default_locale'] ?? 'uk');
+            $translations = entity_translations($pdo, 'pages', $page);
+            $common = ['locale' => $locale, 'translations' => $translations];
             if (($page['template'] ?? '') === 'blog') {
                 $perPage = max(1, (int)($settings['blog_per_page'] ?? 12));
-                $totalPosts = (int)$pdo->query('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published'")->fetchColumn();
+                $totalPostsStmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published' AND locale=?");
+                $totalPostsStmt->execute([$locale]);
+                $totalPosts = (int) $totalPostsStmt->fetchColumn();
                 $totalPages = max(1, (int)ceil($totalPosts / $perPage));
                 $currentPage = max(1, min($totalPages, (int)($_GET['page'] ?? 1)));
                 $offset = ($currentPage - 1) * $perPage;
-                $posts = $pdo->query('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}")->fetchAll();
-                view_frontend('blog', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts, 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]]);
+                $posts = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND locale=? ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
+                $posts->execute([$locale]);
+                view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts->fetchAll(), 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common));
             } elseif (($page['template'] ?? '') === 'contacts') {
-                view_frontend('contacts', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
+                view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
             } elseif (($page['template'] ?? '') === 'home') {
-                view_frontend('home', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
+                $homeExtra = ModuleLoader::hookCollect('home_data', $pdo);
+                view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra));
             } else {
-                view_frontend('page', ['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings]);
+                view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
             }
             exit;
         }
@@ -1046,7 +1229,8 @@ if ($route) {
         $stmt->execute([(int) $route['entity_id']]);
         $post = $stmt->fetch();
         if ($post) {
-            view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo)]);
+            $locale = (string) ($route['locale'] ?? $post['locale'] ?? 'uk');
+            view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo), 'locale' => $locale, 'translations' => entity_translations($pdo, 'posts', $post)]);
             exit;
         }
     }

@@ -94,6 +94,44 @@ if (isset($pdo)) {
 </section>
 <?php endif; ?>
 
+<?php $featuredRooms = $featured_rooms ?? []; if (!empty($featuredRooms)): ?>
+<section class="section">
+  <div class="site-container">
+    <h2 class="section-title">Номери</h2>
+    <div class="post-grid">
+      <?php foreach ($featuredRooms as $room): ?>
+      <article class="post-card">
+        <div class="post-card__body">
+          <h3 class="post-card__title"><a href="/rooms/<?= e($room['slug']) ?>"><?= e($room['title']) ?></a></h3>
+          <?php if (!empty($room['excerpt'])): ?><p class="post-card__excerpt"><?= e($room['excerpt']) ?></p><?php endif; ?>
+          <a class="post-card__more" href="/rooms/<?= e($room['slug']) ?>">Докладніше →</a>
+        </div>
+      </article>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+<?php endif; ?>
+
+<?php $featuredPromotions = $featured_promotions ?? []; if (!empty($featuredPromotions)): ?>
+<section class="section">
+  <div class="site-container">
+    <h2 class="section-title">Акції</h2>
+    <div class="post-grid">
+      <?php foreach ($featuredPromotions as $promo): ?>
+      <article class="post-card">
+        <div class="post-card__body">
+          <h3 class="post-card__title"><a href="/promotions/<?= e($promo['slug']) ?>"><?= e($promo['title']) ?></a></h3>
+          <?php if (!empty($promo['excerpt'])): ?><p class="post-card__excerpt"><?= e($promo['excerpt']) ?></p><?php endif; ?>
+          <a class="post-card__more" href="/promotions/<?= e($promo['slug']) ?>">Докладніше →</a>
+        </div>
+      </article>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+<?php endif; ?>
+
 <section class="section">
   <div class="site-container">
     <div class="cta-banner">
