@@ -21,9 +21,8 @@ $installed = \Core\Installer\Runtime::isInstalled();
 if ($installed) {
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
     if ($method === 'POST' && (string)($_POST['install_action'] ?? '') === 'reset-installation') {
-        $allowReset = (bool)($config['app']['allow_install_reset'] ?? false);
         $token = (string)($_POST['_token'] ?? '');
-        if ($allowReset && hash_equals(csrf_token(), $token)) {
+        if (hash_equals(csrf_token(), $token)) {
             // isInstalled() now treats config.php's app.installed flag as
             // authoritative (a missing lock file alone is self-healed, so a
             // redeploy that wipes storage/ doesn't force reinstallation).

@@ -9,11 +9,13 @@
 </ul>
 <?php if ($usersWarning): ?><div class="err"><?= e($usersWarning) ?></div><?php endif; ?>
 <p><a href="/">Перейти на сайт</a> · <a href="/admin/login">Открыть админку</a></p>
-<?php if ((bool)($config['app']['allow_install_reset'] ?? false)): ?>
-<form method="post" onsubmit="return confirm('Сбросить установку?');">
+<?php if (!$justInstalled): ?>
+<hr style="margin:1.5rem 0;border:none;border-top:1px solid #e5e9f0">
+<p>Хотите переустановить Jura CMS на этом сайте?</p>
+<form method="post" onsubmit="return confirm('Переустановить Jura CMS? Текущая установка будет сброшена (config.php больше не будет отмечен как установленный) — на следующем шаге мастер установки сможет создать таблицы заново или очистить базу. Это действие необратимо.');">
 <input type="hidden" name="install_action" value="reset-installation">
 <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-<button>Reset installation</button>
+<button>Переустановить</button>
 </form>
 <?php endif; ?>
 </div></div></body></html>
