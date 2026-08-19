@@ -310,3 +310,77 @@ if (!function_exists('jura_seed_demo_posts')) {
         return $created;
     }
 }
+
+// ── Frontend page cache ──────────────────────────────────────────────────
+// Whole-page file cache for anonymous GET requests: a hit is served straight
+// off disk before index.php ever connects to the database. No TTL -- a
+// cached page lives until something invalidates it (admin content changes
+// flush the whole cache; see the /admin POST hook in index.php) or an admin
+// clears it from Maintenance. Simpler and more predictable than time-based
+// staleness for a CMS where "content changed" is a well-defined moment.
+
+if (!function_exists('cache_dir')) {
+    function cache_dir(): string
+    {
+        $dir = BASE_PATH . '/cache/pages';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        return $dir;
+    }
+}
+
+if (!function_exists('cache_key_for_request')) {
+    function cache_key_for_request(string $path, string $queryString): string
+    {
+        return md5($path . '?' . $queryString);
+    }
+}
+
+if (!function_exists('cache_get')) {
+    function cache_get(string $key): ?string
+    {
+        $file = cache_dir() . '/' . $key . '.html';
+        if (!is_file($file)) {
+            return null;
+        }
+        $content = @file_get_contents($file);
+        return $content === false ? null : $content;
+    }
+}
+
+if (!function_exists('cache_put')) {
+    function cache_put(string $key, string $html): void
+    {
+        @file_put_contents(cache_dir() . '/' . $key . '.html', $html);
+    }
+}
+
+if (!function_exists('cache_clear')) {
+    function cache_clear(): int
+    {
+        $dir = cache_dir();
+        $cleared = 0;
+        foreach (glob($dir . '/*.html') ?: [] as $file) {
+            if (@unlink($file)) {
+                $cleared++;
+            }
+        }
+        return $cleared;
+    }
+}
+
+if (!function_exists('frontend_render_cached')) {
+    /** Renders via $renderFn, capturing its output into the page cache under
+     * $cacheKey before echoing it. $renderFn is expected to call view_frontend()
+     * (which never returns void-usefully -- it echoes directly), so this
+     * wraps it in an output buffer rather than expecting a return value. */
+    function frontend_render_cached(string $cacheKey, callable $renderFn): void
+    {
+        ob_start();
+        $renderFn();
+        $html = (string) ob_get_clean();
+        cache_put($cacheKey, $html);
+        echo $html;
+    }
+}

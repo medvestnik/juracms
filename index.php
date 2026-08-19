@@ -365,6 +365,18 @@ function uploaded_media_path(array $file): ?array
 $path = normalize_admin_path(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
+// Whole-page cache for anonymous frontend GETs -- served straight off disk,
+// before even connecting to the database, when there's a hit.
+$frontendCacheKey = null;
+if ($method === 'GET' && !str_starts_with($path, '/admin') && !str_starts_with($path, '/install') && !str_starts_with($path, '/forms')) {
+    $frontendCacheKey = cache_key_for_request($path, (string) ($_SERVER['QUERY_STRING'] ?? ''));
+    $cached = cache_get($frontendCacheKey);
+    if ($cached !== null) {
+        echo $cached;
+        exit;
+    }
+}
+
 if (!InstallerRuntime::isInstalled() && !in_array($path, ['/install', '/install/'], true)) {
     redirect('/install/');
 }
@@ -423,6 +435,13 @@ switch (true) {
 if (str_starts_with($path, '/admin')) {
     admin_require_auth();
     $pdo = admin_db();
+    // Any admin write can change what the frontend should show -- flush the
+    // whole page cache rather than trying to track which cached paths a
+    // given save affects. Cheap (a POST is rare next to page views) and
+    // never leaves stale content behind.
+    if ($method === 'POST') {
+        cache_clear();
+    }
     ensure_cms_schema($pdo);
     ModuleLoader::ensureTable($pdo);
     ModuleLoader::autoMigrate($pdo);
@@ -881,6 +900,11 @@ if (str_starts_with($path, '/admin')) {
                     $created = jura_seed_demo_posts($pdo, (int) $_SESSION['admin_user_id']);
                     $msg = $created > 0 ? "Додано демо-публікацій: {$created}" : 'Демо-публікації вже встановлені.';
                 }
+                if ($action === 'clear_cache') {
+                    // Already flushed by the blanket admin-POST hook above;
+                    // this just gives a clear confirmation message.
+                    $msg = 'Кеш сторінок очищено.';
+                }
             } catch (Throwable $e) {
                 session_flash('maint_error', $e->getMessage());
                 redirect('/admin/maintenance');
@@ -1192,14 +1216,14 @@ if ($route) {
                 $offset = ($currentPage - 1) * $perPage;
                 $posts = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND (locale=? OR locale='') ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
                 $posts->execute([$locale]);
-                view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts->fetchAll(), 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common));
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts->fetchAll(), 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common)));
             } elseif (($page['template'] ?? '') === 'contacts') {
-                view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             } elseif (($page['template'] ?? '') === 'home') {
                 $homeExtra = ModuleLoader::hookCollect('home_data', $pdo);
-                view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra));
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra)));
             } else {
-                view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             }
             exit;
         }
@@ -1210,11 +1234,11 @@ if ($route) {
         $post = $stmt->fetch();
         if ($post) {
             $locale = (string) ($route['locale'] ?? $post['locale'] ?? 'uk');
-            view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo), 'locale' => $locale, 'translations' => entity_translations($pdo, 'posts', $post)]);
+            frontend_render_cached($frontendCacheKey, fn() => view_frontend('post', ['title' => $post['meta_title'] ?: $post['title'], 'meta_description' => $post['meta_description'], 'post' => $post, 'settings' => cms_settings($pdo), 'locale' => $locale, 'translations' => entity_translations($pdo, 'posts', $post)]));
             exit;
         }
     }
 }
 
 http_response_code(404);
-view_frontend('404', ['title' => '404', 'settings' => cms_settings($pdo)]);
+frontend_render_cached($frontendCacheKey, fn() => view_frontend('404', ['title' => '404', 'settings' => cms_settings($pdo)]));
