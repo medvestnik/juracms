@@ -140,6 +140,13 @@ elseif($hasGroupName){$pdo->prepare('INSERT INTO '.jura_table('settings').' (set
 else{$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1]]);}
 }
 file_put_contents($configFile,"<?php\n\nreturn ".var_export(['app'=>['name'=>$a['site_name'],'installed'=>true,'version'=>$version],'database'=>['connection'=>'mysql','host'=>$db['host'],'port'=>(int)$db['port'],'database'=>$db['database'],'username'=>$db['username'],'password'=>$db['password'],'prefix'=>$p,'charset'=>'utf8mb4']],true).";\n");
+// ensure_cms_schema()'s schema-version marker lives on the filesystem
+// (storage/schema-version.txt) and survives a DB wipe -- without clearing
+// it here, a clean_install (or pointing this install at a fresh/different
+// database) leaves a stale marker claiming the schema is already current,
+// so ensure_cms_schema() never runs again and tables it's responsible for
+// (jura_locales among them) never get created on the new database.
+@unlink(BASE_PATH.'/storage/schema-version.txt');
 // jura_table() reads config.php for the table prefix -- must run after the
 // write above, or (on a non-default prefix) these would target the wrong
 // tables entirely (jura_table() falls back to a hardcoded 'jura_' prefix

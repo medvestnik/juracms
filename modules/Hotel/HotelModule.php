@@ -201,7 +201,7 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
             redirect(isset($_POST['_close']) ? '/admin/hotel/rooms' : '/admin/hotel/rooms/' . $roomId . '/edit');
         }
         $allAmenities = $pdo->query('SELECT * FROM ' . jura_table('hotel_amenities') . ' ORDER BY sort_order,id')->fetchAll();
-        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        $allLocales = jura_available_locales($pdo, 'code,native_name');
         view_admin('hotel/room-edit', ['title' => 'Новий номер', 'room' => [], 'all_amenities' => $allAmenities, 'room_amenity_ids' => [], 'room_rates' => [], 'all_locales' => $allLocales]);
         return true;
     }
@@ -226,7 +226,7 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         $roomAmenityIds = $pdo->query('SELECT amenity_id FROM ' . jura_table('hotel_room_amenities') . ' WHERE room_id=' . $id)->fetchAll(PDO::FETCH_COLUMN, 0);
         $roomRates = $pdo->query('SELECT * FROM ' . jura_table('hotel_room_rates') . ' WHERE room_id=' . $id . ' ORDER BY sort_order,id')->fetchAll();
         $roomImages = $pdo->query('SELECT * FROM ' . jura_table('hotel_room_images') . ' WHERE room_id=' . $id . ' ORDER BY is_featured DESC,sort_order,id')->fetchAll();
-        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        $allLocales = jura_available_locales($pdo, 'code,native_name');
         view_admin('hotel/room-edit', ['title' => 'Редагувати номер', 'room' => $room, 'all_amenities' => $allAmenities, 'room_amenity_ids' => array_map('intval', $roomAmenityIds), 'room_rates' => $roomRates, 'room_images' => $roomImages, 'all_locales' => $allLocales]);
         return true;
     }
@@ -325,7 +325,7 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
                 ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), (string) ($_POST['locale'] ?? ''), $status]);
             redirect('/admin/hotel/promotions');
         }
-        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        $allLocales = jura_available_locales($pdo, 'code,native_name');
         view_admin('hotel/promotion-edit', ['title' => 'Нова акція', 'promotion' => [], 'all_locales' => $allLocales]);
         return true;
     }
@@ -342,7 +342,7 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
                 ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), (string) ($_POST['locale'] ?? ''), $id]);
             redirect('/admin/hotel/promotions');
         }
-        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        $allLocales = jura_available_locales($pdo, 'code,native_name');
         view_admin('hotel/promotion-edit', ['title' => 'Редагувати акцію', 'promotion' => $promo, 'all_locales' => $allLocales]);
         return true;
     }
@@ -359,7 +359,7 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
                 ->execute([$slug, $_POST['title'], $_POST['description'] ?? '', $_POST['status'] ?? 'active', $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', (int) ($_POST['sort_order'] ?? 0), (string) ($_POST['locale'] ?? '')]);
             redirect('/admin/hotel/galleries');
         }
-        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        $allLocales = jura_available_locales($pdo, 'code,native_name');
         view_admin('hotel/gallery-edit', ['title' => 'Нова галерея', 'gallery' => [], 'all_locales' => $allLocales]);
         return true;
     }
@@ -377,7 +377,7 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         }
         $imgStmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_gallery_images') . ' WHERE gallery_id=? ORDER BY sort_order,id');
         $imgStmt->execute([$id]);
-        $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        $allLocales = jura_available_locales($pdo, 'code,native_name');
         view_admin('hotel/gallery-edit', ['title' => 'Редагувати галерею', 'gallery' => $gal, 'gallery_images' => $imgStmt->fetchAll(), 'all_locales' => $allLocales]);
         return true;
     }

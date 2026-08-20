@@ -64,10 +64,28 @@ function ensure_cms_schema(PDO $pdo): void
     // which is a lot of avoidable round-trips once the schema is already
     // up to date. Short-circuit via a file marker; bump CMS_SCHEMA_VERSION
     // whenever a table/column/default changes below so it re-runs once.
+    //
+    // The marker lives on the filesystem and can outlive the database it
+    // describes (a clean_install/reinstall wipes tables but not storage/,
+    // and a site can get pointed at a different database entirely) --
+    // trusting it blindly then means core tables never get (re)created and
+    // every admin page needing them fatals. Cheaply confirm jura_locales
+    // (one of the tables this function is responsible for) actually exists
+    // before trusting a matching marker; a stale marker self-heals here
+    // instead of requiring a manual reinstall.
     $marker = BASE_PATH . '/storage/schema-version.txt';
     if (is_file($marker) && trim((string) @file_get_contents($marker)) === CMS_SCHEMA_VERSION) {
-        $ensuredThisRequest = true;
-        return;
+        $localesTable = str_replace('`', '', jura_table('locales'));
+        $exists = false;
+        try {
+            $exists = (bool) $pdo->query('SHOW TABLES LIKE ' . $pdo->quote($localesTable))->fetch();
+        } catch (\Throwable) {
+            $exists = false;
+        }
+        if ($exists) {
+            $ensuredThisRequest = true;
+            return;
+        }
     }
 
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('locales') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,code VARCHAR(16) UNIQUE,name VARCHAR(191),native_name VARCHAR(191),is_default TINYINT(1) DEFAULT 0,is_active TINYINT(1) DEFAULT 1,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -587,7 +605,7 @@ if (str_starts_with($path, '/admin')) {
         $stmt->execute([(int) $matches[1]]);
         $editPage = $stmt->fetch() ?: [];
         [$activeCodes] = $editPage ? active_locales($pdo) : [[]];
-        $localeRows = $editPage ? $pdo->query('SELECT code,name,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll() : [];
+        $localeRows = $editPage ? jura_available_locales($pdo) : [];
         view_admin('pages', [
             'title' => 'Редагувати сторінку',
             'edit' => $editPage,
@@ -760,7 +778,7 @@ if (str_starts_with($path, '/admin')) {
             save_setting($pdo, 'active_locales', implode(',', $activeCodes), 'localization');
             redirect('/admin/locales');
         }
-        $locales = $pdo->query('SELECT * FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        $locales = jura_available_locales($pdo, '*');
         view_admin('locales', ['title' => 'Мови сайту', 'locales' => $locales, 'flash_error' => session_flash('error')]);
         exit;
     }
@@ -1058,7 +1076,7 @@ if (str_starts_with($path, '/admin')) {
             'title' => 'Редагувати публікацію',
             'post' => $post,
             'translations' => $post ? entity_translations($pdo, 'posts', $post) : [],
-            'all_locales' => $post ? $pdo->query('SELECT code,name,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll() : [],
+            'all_locales' => $post ? jura_available_locales($pdo) : [],
         ]);
         exit;
     }

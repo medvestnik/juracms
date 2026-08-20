@@ -244,6 +244,20 @@ if (!function_exists('admin_require_auth')) {
     }
 }
 
+if (!function_exists('jura_available_locales')) {
+    /** Read-only locale list for populating a "Мова" select -- never
+     * fatals if jura_locales is (temporarily) missing, just degrades to
+     * no locale options instead of a white page. */
+    function jura_available_locales(PDO $pdo, string $columns = 'code,name,native_name'): array
+    {
+        try {
+            return $pdo->query('SELECT ' . $columns . ' FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+}
+
 if (!function_exists('jura_seed_thankyou_page')) {
     // Callable both from the installer (before index.php's function set
     // exists) and from the admin, so it only depends on helpers loaded by
