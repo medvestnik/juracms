@@ -93,7 +93,7 @@ ModuleLoader::register('portfolio', [
                 $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('portfolio_items') . ' WHERE id=? AND kind=?');
                 $stmt->execute([(int)$segment, $kind]); $item = $stmt->fetch() ?: [];
             }
-            $allLocales = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' ORDER BY sort_order,id')->fetchAll();
+            $allLocales = jura_available_locales($pdo, 'code,native_name');
             $render('admin', 'editor', ['title' => ($item ? 'Редагувати' : 'Додати') . ($kind === 'project' ? ' проєкт' : ' портфоліо'), 'item'=>$item, 'kind'=>$kind, 'base'=>$base, 'all_locales'=>$allLocales]);
         } else {
             $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('portfolio_items') . ' WHERE kind=? ORDER BY sort_order,id'); $stmt->execute([$kind]);

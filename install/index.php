@@ -116,7 +116,7 @@ $allPermIds=$pdo->query('SELECT id FROM '.jura_table('permissions'))->fetchAll(P
 $homeContent='<p>Jura CMS &mdash; це легка система керування сайтом із класичною установкою в корінь хостингу та сучасною адмін-панеллю. Створюйте сторінки, ведіть блог, керуйте медіатекою та меню &mdash; все з коробки.</p><p>Ця сторінка, як і сторінки &laquo;Про нас&raquo; та &laquo;Контакти&raquo;, &mdash; демонстраційний контент. Відредагуйте або видаліть його в розділі <strong>Сторінки</strong> адмін-панелі.</p>';
 $pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,excerpt,status,template,published_at) VALUES (NULL,?,?,?,?,?,?,?,NOW())')->execute([$uid,'Главная','home',$homeContent,'Jura CMS &mdash; легка CMS з класичною установкою та сучасною адмін-панеллю.','published','home']);
 $aboutContent='<p>'.e($a['site_name']).' працює на Jura CMS &mdash; системі керування сайтом, що поєднує простоту класичних движків із зручністю адмін-панелі нового покоління.</p><p>У цьому розділі зазвичай розповідають історію компанії, місію та команду. Замініть цей текст власним описом у розділі <strong>Сторінки</strong>.</p><div class="feature-grid" style="margin-top:1.75rem"><div class="feature-card"><div class="feature-card__icon">🎯</div><h3>Місія</h3><p>Дати простий та зрозумілий інструмент для створення й розвитку сайту.</p></div><div class="feature-card"><div class="feature-card__icon">⚡</div><h3>Швидкість</h3><p>Мінімум залежностей, встановлення в корінь хостингу за кілька хвилин.</p></div><div class="feature-card"><div class="feature-card__icon">🤝</div><h3>Підтримка</h3><p>Оновлення та документація для впевненого старту й розвитку проєкту.</p></div></div>';
-$pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,published_at) VALUES (NULL,?,?,?,?,?,NOW())')->execute([$uid,'О нас','about',$aboutContent,'published']);
+$pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,template,published_at) VALUES (NULL,?,?,?,?,?,?,NOW())')->execute([$uid,'О нас','about',$aboutContent,'published','about']);
 $aboutId=(int)$pdo->lastInsertId();
 $contactsContent='<p>Залишились питання? Напишіть нам &mdash; форма нижче надсилає повідомлення прямо на пошту адміністратора сайту.</p>';
 $pdo->prepare('INSERT INTO '.jura_table('pages').' (parent_id,author_id,title,slug,content,status,template,published_at) VALUES (NULL,?,?,?,?,?,?,NOW())')->execute([$uid,'Контакты','contacts',$contactsContent,'published','contacts']); $contactsId=(int)$pdo->lastInsertId();
@@ -140,6 +140,13 @@ elseif($hasGroupName){$pdo->prepare('INSERT INTO '.jura_table('settings').' (set
 else{$pdo->prepare('INSERT INTO '.jura_table('settings').' (setting_key,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')->execute([$s[0],$s[1]]);}
 }
 file_put_contents($configFile,"<?php\n\nreturn ".var_export(['app'=>['name'=>$a['site_name'],'installed'=>true,'version'=>$version],'database'=>['connection'=>'mysql','host'=>$db['host'],'port'=>(int)$db['port'],'database'=>$db['database'],'username'=>$db['username'],'password'=>$db['password'],'prefix'=>$p,'charset'=>'utf8mb4']],true).";\n");
+// ensure_cms_schema()'s schema-version marker lives on the filesystem
+// (storage/schema-version.txt) and survives a DB wipe -- without clearing
+// it here, a clean_install (or pointing this install at a fresh/different
+// database) leaves a stale marker claiming the schema is already current,
+// so ensure_cms_schema() never runs again and tables it's responsible for
+// (jura_locales among them) never get created on the new database.
+@unlink(BASE_PATH.'/storage/schema-version.txt');
 // jura_table() reads config.php for the table prefix -- must run after the
 // write above, or (on a non-default prefix) these would target the wrong
 // tables entirely (jura_table() falls back to a hardcoded 'jura_' prefix
