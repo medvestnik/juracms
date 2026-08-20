@@ -23,13 +23,17 @@
   }
   .jura-btn-primary:hover { box-shadow: 0 8px 22px var(--jura-primary-ring); transform: translateY(-1px); }
   .jura-btn-secondary:hover { transform: translateY(-1px); }
+  .brand-cms {
+    background: linear-gradient(90deg, #1d4ed8, #22d3ee);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
 </style>
 </head>
 <body class="jura-app">
 <div class="jura-card installed-card">
   <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:1.4rem">
     <img src="/install/assets/logo.svg" width="36" height="36" alt="">
-    <span style="font-size:1.05rem;font-weight:800;letter-spacing:-.02em">Jura CMS</span>
+    <span style="font-size:1.05rem;font-weight:800;letter-spacing:-.02em">Jura <span class="brand-cms">CMS</span></span>
   </div>
 
   <?php if (!empty($justInstalled)): ?>
