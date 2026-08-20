@@ -1020,9 +1020,14 @@ if (str_starts_with($path, '/admin')) {
                 ->execute([$slug, $_POST['title'], $_POST['excerpt'] ?? '', $_POST['content'] ?? '', $status, $_POST['meta_title'] ?? '', $_POST['meta_description'] ?? '', $publishedAt, $defaultLocale]);
             $newPostId = (int) $pdo->lastInsertId();
             save_route($pdo, '/blog/' . $slug, 'post', $newPostId);
+            $categoryId = (int) ($_POST['category_id'] ?? 0);
+            if ($categoryId) {
+                $pdo->prepare('INSERT INTO ' . jura_table('post_category_relations') . ' (post_id,category_id) VALUES (?,?)')->execute([$newPostId, $categoryId]);
+            }
             redirect(isset($_POST['_close']) ? '/admin/posts' : '/admin/posts/' . $newPostId . '/edit');
         }
-        view_admin('post-edit', ['title' => 'Нова публікація', 'post' => []]);
+        $categories = $pdo->query('SELECT id,title FROM ' . jura_table('post_categories') . ' ORDER BY sort_order,title')->fetchAll();
+        view_admin('post-edit', ['title' => 'Нова публікація', 'post' => [], 'categories' => $categories]);
         exit;
     }
 
@@ -1067,14 +1072,24 @@ if (str_starts_with($path, '/admin')) {
             $routePrefix = $postLocale !== '' && $postLocale !== $defaultLocale ? '/' . $postLocale : '';
             $pdo->prepare('DELETE FROM ' . jura_table('routes') . " WHERE entity_type='post' AND entity_id=?")->execute([$id]);
             save_route($pdo, $routePrefix . '/blog/' . $slug, 'post', $id);
+            $categoryId = (int) ($_POST['category_id'] ?? 0);
+            $pdo->prepare('DELETE FROM ' . jura_table('post_category_relations') . ' WHERE post_id=?')->execute([$id]);
+            if ($categoryId) {
+                $pdo->prepare('INSERT INTO ' . jura_table('post_category_relations') . ' (post_id,category_id) VALUES (?,?)')->execute([$id, $categoryId]);
+            }
             redirect(isset($_POST['_close']) ? '/admin/posts' : '/admin/posts/' . $id . '/edit');
         }
         if ($post) {
             $post['content'] = str_replace(['src="/userfiles/', "src='/userfiles/"], ['src="/public/userfiles/', "src='/public/userfiles/"], $post['content'] ?? '');
+            $catStmt = $pdo->prepare('SELECT category_id FROM ' . jura_table('post_category_relations') . ' WHERE post_id=? LIMIT 1');
+            $catStmt->execute([$post['id']]);
+            $post['category_id'] = (int) $catStmt->fetchColumn();
         }
+        $categories = $pdo->query('SELECT id,title FROM ' . jura_table('post_categories') . ' ORDER BY sort_order,title')->fetchAll();
         view_admin('post-edit', [
             'title' => 'Редагувати публікацію',
             'post' => $post,
+            'categories' => $categories,
             'translations' => $post ? entity_translations($pdo, 'posts', $post) : [],
             'all_locales' => $post ? jura_available_locales($pdo) : [],
         ]);
@@ -1119,6 +1134,33 @@ if (str_starts_with($path, '/admin')) {
         $next = $cur === 'published' ? 'draft' : 'published';
         $pdo->prepare('UPDATE ' . jura_table('posts') . ' SET status=?,updated_at=NOW() WHERE id=?')->execute([$next, (int)$matches[1]]);
         redirect('/admin/posts');
+    }
+
+    if ($path === '/admin/categories') {
+        if ($method === 'POST') {
+            if (($_POST['action'] ?? '') === 'delete') {
+                $catId = (int) $_POST['id'];
+                $pdo->prepare('DELETE FROM ' . jura_table('post_category_relations') . ' WHERE category_id=?')->execute([$catId]);
+                $pdo->prepare('DELETE FROM ' . jura_table('post_categories') . ' WHERE id=?')->execute([$catId]);
+            } else {
+                $title = trim((string) ($_POST['title'] ?? ''));
+                $slug = trim((string) ($_POST['slug'] ?: slugify($title)));
+                $description = trim((string) ($_POST['description'] ?? ''));
+                $sortOrder = (int) ($_POST['sort_order'] ?? 0);
+                $catId = (int) ($_POST['id'] ?? 0);
+                if ($catId) {
+                    $pdo->prepare('UPDATE ' . jura_table('post_categories') . ' SET title=?,slug=?,description=?,sort_order=?,updated_at=NOW() WHERE id=?')
+                        ->execute([$title, $slug, $description, $sortOrder, $catId]);
+                } else {
+                    $pdo->prepare('INSERT INTO ' . jura_table('post_categories') . ' (title,slug,description,sort_order) VALUES (?,?,?,?)')
+                        ->execute([$title, $slug, $description, $sortOrder]);
+                }
+            }
+            redirect('/admin/categories');
+        }
+        $categories = $pdo->query('SELECT c.*,(SELECT COUNT(*) FROM ' . jura_table('post_category_relations') . ' r WHERE r.category_id=c.id) post_count FROM ' . jura_table('post_categories') . ' c ORDER BY sort_order,title')->fetchAll();
+        view_admin('categories', ['title' => 'Категорії публікацій', 'categories' => $categories]);
+        exit;
     }
 
     if (preg_match('#^/admin/pages/(\d+)/toggle$#', $path, $matches) && $method === 'POST') {

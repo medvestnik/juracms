@@ -63,6 +63,7 @@ $pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
         <?php if ($sort === 'order'): ?><th style="width:32px"></th><?php endif; ?>
         <th style="width:44px">ID</th>
         <th>Назва</th>
+        <th>Категорія</th>
         <th>Статус</th>
         <th>Опубліковано</th>
         <th>Дії</th>
@@ -76,6 +77,7 @@ $pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
         <?php endif; ?>
         <td style="color:#94a3b8;font-size:.8rem"><?= (int)$p['id'] ?></td>
         <td><?= e($p['title']) ?></td>
+        <td style="font-size:.82rem;color:#64748b"><?= e($p['category_title'] ?? '—') ?></td>
         <td>
           <form method="post" action="/admin/posts/<?= (int)$p['id'] ?>/toggle" style="margin:0;display:inline">
             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
