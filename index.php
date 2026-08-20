@@ -872,7 +872,8 @@ if (str_starts_with($path, '/admin')) {
                 if ($action === 'fix_templates') {
                     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET template='home' WHERE slug='home'")->execute();
                     $pdo->prepare('UPDATE ' . jura_table('pages') . " SET template='contacts' WHERE slug='contacts'")->execute();
-                    $msg = 'Шаблони оновлено: home → home, contacts → contacts';
+                    $pdo->prepare('UPDATE ' . jura_table('pages') . " SET template='about' WHERE slug='about'")->execute();
+                    $msg = 'Шаблони оновлено: home → home, contacts → contacts, about → about';
                 }
                 if ($action === 'rebuild_routes') {
                     $pageRoutes = ['home' => '/', 'about' => '/about', 'contacts' => '/contacts', 'blog' => '/blog'];
@@ -1282,6 +1283,8 @@ if ($route) {
             } elseif (($page['template'] ?? '') === 'home') {
                 $homeExtra = ModuleLoader::hookCollect('home_data', $pdo, $locale);
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra)));
+            } elseif (($page['template'] ?? '') === 'about') {
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('about', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             } else {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             }
