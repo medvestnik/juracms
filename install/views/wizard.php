@@ -31,9 +31,30 @@ $stepTitles = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Установка Jura CMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/install/assets/vendor/jura-ui/jura-ui.css">
 <style>
   body { margin: 0; min-height: 100vh; background: var(--jura-bg); }
+  .install-layout h1, .install-layout h2, .install-layout .jura-btn {
+    font-family: 'Manrope', var(--jura-font);
+  }
+  .install-brand h1 {
+    background: linear-gradient(90deg, #ffffff 10%, #bff2ff 60%, #7fe3ff 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .install-layout .jura-btn-primary {
+    background: linear-gradient(135deg, var(--jura-primary) 0%, #1d4ed8 100%);
+    border: none;
+    box-shadow: 0 2px 10px var(--jura-primary-ring);
+    transition: box-shadow .18s ease, transform .18s ease;
+  }
+  .install-layout .jura-btn-primary:hover {
+    box-shadow: 0 8px 22px var(--jura-primary-ring);
+    transform: translateY(-1px);
+  }
+  .install-layout .jura-btn-secondary:hover { transform: translateY(-1px); }
   .install-layout { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
   .install-brand {
     display: flex; flex-direction: column; justify-content: center;
