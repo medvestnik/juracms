@@ -1,0 +1,11 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Jura CMS">
+  <defs>
+    <linearGradient id="jura-logo-grad" x1="4" y1="6" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1e3a8a"/>
+      <stop offset="0.55" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#jura-logo-grad)"/>
+  <path d="M40 15c2.2 0 4 1.8 4 4v18.5c0 8.2-6.6 14.8-14.7 14.8-6 0-11.3-3.6-13.6-9.1a4 4 0 1 1 7.4-3.1c1 2.5 3.5 4.2 6.2 4.2 3.7 0 6.7-3 6.7-6.8V19c0-2.2 1.8-4 4-4z" fill="#fff"/>
+</svg>
