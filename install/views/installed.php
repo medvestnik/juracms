@@ -35,7 +35,7 @@
 <body class="jura-app">
 <div class="jura-card installed-card">
   <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:1.4rem">
-    <img src="/install/assets/logo.svg" width="36" height="36" alt="">
+    <img src="/install/assets/jura-cms-j-logo.png" width="36" height="36" alt="" style="object-fit:contain">
     <span style="font-size:1.05rem;font-weight:800;letter-spacing:-.02em">Jura <span class="brand-cms">CMS</span></span>
   </div>
 
