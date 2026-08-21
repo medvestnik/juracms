@@ -34,11 +34,14 @@ $stepTitles = [
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/install/assets/vendor/jura-ui/jura-ui.css">
+<link rel="stylesheet" href="/install/assets/jura-ui/jura-ui.css">
 <style>
-  body { margin: 0; min-height: 100vh; background: var(--jura-bg); }
+  body {
+    margin: 0; min-height: 100vh; background: var(--jura-bg, #f8fafc);
+    font-family: var(--jura-font, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  }
   .install-layout h1, .install-layout h2, .install-layout .jura-btn {
-    font-family: 'Manrope', var(--jura-font);
+    font-family: 'Manrope', var(--jura-font, Inter, -apple-system, sans-serif);
   }
   .install-brand h1 {
     background: linear-gradient(90deg, #ffffff 10%, #bff2ff 60%, #7fe3ff 100%);
