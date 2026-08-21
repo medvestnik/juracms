@@ -103,7 +103,7 @@ $stepTitles = [
   <div class="install-brand">
     <div class="install-brand-inner">
       <div style="display:flex;align-items:center;gap:.65rem;margin-bottom:2.5rem">
-        <img src="/install/assets/logo.svg" width="40" height="40" alt="">
+        <img src="/install/assets/jura-cms-j-logo.png" width="40" height="40" alt="" style="object-fit:contain">
         <span style="font-size:1.2rem;font-weight:800;letter-spacing:-.02em">Jura CMS</span>
       </div>
       <h1 style="font-size:1.9rem;font-weight:800;line-height:1.25;margin:0 0 .9rem;letter-spacing:-.03em">
