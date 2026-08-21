@@ -156,7 +156,7 @@ final class Updater
 
         $result['ok'] = true;
         $result['message'] = sprintf(
-            'Оновлено до v%s. Файлів застосовано: %d.%s',
+            'Оновлено до v%s. Файлів застосовано: %d. Папка config/ не чіпається автооновленням.%s',
             $check['latest_version'],
             $applied,
             $backupPath ? ' Резервна копія: ' . basename($backupPath) : ''
@@ -204,6 +204,18 @@ final class Updater
         return $path;
     }
 
+    /**
+     * Paths (relative to BASE_PATH, top-level segment only) that an
+     * automatic core update must never overwrite. config/ in particular
+     * holds per-site choices (active theme, editor, etc.) that a site owner
+     * sets through the admin UI or by hand — blindly copying the generic
+     * release's config/ui.php over it silently resets things like a custom
+     * frontend_theme back to "default", breaking any page whose view relies
+     * on that theme's own CSS classes. This was exactly what happened to a
+     * customized fork after clicking "update now".
+     */
+    private const UPDATE_PROTECTED_PATHS = ['config'];
+
     private static function copyRecursive(string $from, string $to): int
     {
         $count = 0;
@@ -214,6 +226,10 @@ final class Updater
         $baseLen = strlen($from) + 1;
         foreach ($iterator as $item) {
             $relative = substr($item->getPathname(), $baseLen);
+            $topLevel = explode('/', $relative, 2)[0];
+            if (in_array($topLevel, self::UPDATE_PROTECTED_PATHS, true)) {
+                continue;
+            }
             $target = $to . '/' . $relative;
             if ($item->isDir()) {
                 if (!is_dir($target)) {
