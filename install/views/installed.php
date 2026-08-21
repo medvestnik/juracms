@@ -7,10 +7,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/install/assets/vendor/jura-ui/jura-ui.css">
+<link rel="stylesheet" href="/install/assets/jura-ui/jura-ui.css">
 <style>
-  body { margin: 0; min-height: 100vh; background: var(--jura-bg); display: grid; place-items: center; padding: 20px; }
-  h1, h2, .jura-btn { font-family: 'Manrope', var(--jura-font); }
+  body {
+    margin: 0; min-height: 100vh; background: var(--jura-bg, #f8fafc); display: grid; place-items: center; padding: 20px;
+    font-family: var(--jura-font, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  }
+  h1, h2, .jura-btn { font-family: 'Manrope', var(--jura-font, Inter, -apple-system, sans-serif); }
   .installed-card { width: 100%; max-width: 460px; }
   .installed-list { list-style: none; padding: 0; margin: 0 0 1.2rem; display: grid; gap: .5rem; }
   .installed-list li { display: flex; align-items: center; justify-content: space-between; padding: .55rem .8rem; border: 1px solid var(--jura-border); border-radius: var(--jura-radius-sm); font-size: .85rem; }
