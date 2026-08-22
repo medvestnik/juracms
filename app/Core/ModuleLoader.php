@@ -226,14 +226,159 @@ final class ModuleLoader
         $pdo->prepare('DELETE FROM ' . \jura_table('modules') . ' WHERE slug=?')->execute([$slug]);
     }
 
+    /**
+     * Unpacks an uploaded module .zip into modules/ so it shows up in the
+     * available-modules list, ready for the normal "Встановити" button.
+     * Accepts either a zip with module.json at its root, or (the common
+     * convention, matching how a module directory is normally shared) a
+     * single top-level folder containing module.json — the extracted
+     * folder's own name is used as-is for modules/<name>, so the module's
+     * actual directory casing (e.g. "GitDeploy") is preserved exactly
+     * rather than re-derived from the slug.
+     */
+    public static function installFromZip(string $zipPath): array
+    {
+        $result = ['ok' => false, 'message' => '', 'slug' => null];
+
+        if (!class_exists(\ZipArchive::class)) {
+            $result['message'] = 'Розширення PHP ZipArchive недоступне на цьому хостингу — завантаження модулів архівом неможливе.';
+            return $result;
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            $result['message'] = 'Не вдалося відкрити ZIP-архів.';
+            return $result;
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/jura-module-upload-' . bin2hex(random_bytes(4));
+        if (!@mkdir($tmpDir, 0775, true)) {
+            $zip->close();
+            $result['message'] = 'Не вдалося створити тимчасову директорію.';
+            return $result;
+        }
+        $zip->extractTo($tmpDir);
+        $zip->close();
+
+        $moduleDir = null;
+        $folderName = null;
+        if (is_file($tmpDir . '/module.json')) {
+            $moduleDir = $tmpDir;
+        } else {
+            $entries = array_values(array_diff(scandir($tmpDir) ?: [], ['.', '..']));
+            if (count($entries) === 1 && is_dir($tmpDir . '/' . $entries[0]) && is_file($tmpDir . '/' . $entries[0] . '/module.json')) {
+                $moduleDir = $tmpDir . '/' . $entries[0];
+                $folderName = $entries[0];
+            }
+        }
+
+        if ($moduleDir === null) {
+            self::rrmdir($tmpDir);
+            $result['message'] = 'Архів не схожий на модуль JuraCMS (немає module.json у корені або в єдиній кореневій папці).';
+            return $result;
+        }
+
+        $manifest = json_decode((string) file_get_contents($moduleDir . '/module.json'), true);
+        if (!is_array($manifest) || empty($manifest['slug'])) {
+            self::rrmdir($tmpDir);
+            $result['message'] = 'module.json пошкоджений або без поля "slug".';
+            return $result;
+        }
+
+        $folderName = $folderName ?? preg_replace('/[^A-Za-z0-9_-]/', '', (string) $manifest['slug']);
+        if ($folderName === '' || str_contains($folderName, '..')) {
+            self::rrmdir($tmpDir);
+            $result['message'] = 'Некоректна назва директорії модуля в архіві.';
+            return $result;
+        }
+
+        $target = dirname(__DIR__, 2) . '/modules/' . $folderName;
+        self::rrmdir($target);
+        self::copyRecursive($moduleDir, $target);
+        self::rrmdir($tmpDir);
+
+        $result['ok'] = true;
+        $result['slug'] = (string) $manifest['slug'];
+        $result['message'] = 'Модуль «' . (string) ($manifest['name'] ?? $manifest['slug']) . '» завантажено в modules/' . $folderName . '. Тепер натисніть «Встановити» нижче.';
+        return $result;
+    }
+
+    private static function rrmdir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($items as $item) {
+            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
+        }
+        @rmdir($dir);
+    }
+
+    private static function copyRecursive(string $from, string $to): void
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($from, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
+        );
+        $baseLen = strlen($from) + 1;
+        foreach ($iterator as $item) {
+            $target = $to . '/' . substr($item->getPathname(), $baseLen);
+            if ($item->isDir()) {
+                if (!is_dir($target)) {
+                    @mkdir($target, 0775, true);
+                }
+                continue;
+            }
+            $targetDir = dirname($target);
+            if (!is_dir($targetDir)) {
+                @mkdir($targetDir, 0775, true);
+            }
+            @copy($item->getPathname(), $target);
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+    /**
+     * Maps a module's slug (from its own module.json, e.g. "gitdeploy") to
+     * its actual on-disk directory name (e.g. "GitDeploy"). Built by
+     * scanning modules/*\/module.json rather than guessing the directory
+     * name from the slug string — a slug like "gitdeploy" has no hyphen to
+     * split on, so a naive ucfirst() only ever produces "Gitdeploy", never
+     * "GitDeploy". That mismatch is silent and harmless on a case-insensitive
+     * filesystem (macOS/Windows dev machines) but means modulePath() points
+     * at a directory that doesn't exist on any real (case-sensitive) Linux
+     * host — install()/readManifest() then just no-op with no error at all.
+     */
+    private static function slugToDirMap(): array
+    {
+        static $map = null;
+        if ($map !== null) {
+            return $map;
+        }
+        $map = [];
+        foreach (glob(dirname(__DIR__, 2) . '/modules/*/module.json') ?: [] as $file) {
+            $data = json_decode(file_get_contents($file), true);
+            if (is_array($data) && !empty($data['slug'])) {
+                $map[$data['slug']] = basename(dirname($file));
+            }
+        }
+        return $map;
+    }
+
     private static function modulePath(string $slug): string
     {
-        return dirname(__DIR__, 2) . '/modules/' . self::slugToDir($slug);
+        $dir = self::slugToDirMap()[$slug] ?? self::slugToDir($slug);
+        return dirname(__DIR__, 2) . '/modules/' . $dir;
     }
 
     private static function slugToDir(string $slug): string
     {
+        // Fallback for a slug with no matching module.json on disk yet
+        // (e.g. install() called before the module's files were placed).
         // e.g. "hotel" → "Hotel", "real-estate" → "RealEstate"
         return implode('', array_map('ucfirst', explode('-', $slug)));
     }
