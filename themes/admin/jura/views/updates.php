@@ -37,12 +37,12 @@ $check = $update_check ?? null;
     <?php if (!empty($check['release_notes'])): ?>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;margin-bottom:1rem;max-height:260px;overflow:auto;font-size:.85rem;white-space:pre-wrap"><?= e($check['release_notes']) ?></div>
     <?php endif; ?>
-    <p style="color:#64748b;font-size:.85rem;margin:0 0 .75rem">Папки <code>config/</code>, <code>modules/</code> та <code>themes/</code> оновлення не чіпає — якщо вони кастомізовані під цей сайт, оновлюйте їх вручну.</p>
+    <p style="color:#64748b;font-size:.85rem;margin:0 0 .75rem"><code>config/</code> ніколи не чіпається. З <code>modules/</code> і <code>themes/</code> оновлюються лише спільні/невстановлені частини (адмінка, стандартна фронтенд-тема, ще не встановлені модулі) — уже наявний кастомний модуль чи фронтенд-тема цього сайту залишаються як є.</p>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
       <form method="post" id="update-now-form">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="update_now">
-        <button class="jura-btn jura-btn-primary" type="submit" id="update-now-btn" onclick="return confirm('Оновити Jura CMS до v<?= e($check['latest_version']) ?>? Перед оновленням буде створено резервну копію файлів у storage/backups/. Папки config/, modules/ та themes/ не будуть змінені.')">⬇ Оновити зараз</button>
+        <button class="jura-btn jura-btn-primary" type="submit" id="update-now-btn" onclick="return confirm('Оновити Jura CMS до v<?= e($check['latest_version']) ?>? Перед оновленням буде створено резервну копію файлів у storage/backups/. config/ і кастомізовані modules/themes не будуть змінені.')">⬇ Оновити зараз</button>
       </form>
       <?php if (!empty($check['release_url'])): ?>
       <a class="jura-btn jura-btn-secondary" href="<?= e($check['release_url']) ?>" target="_blank" rel="noopener">Переглянути реліз на GitHub</a>

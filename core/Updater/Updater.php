@@ -156,7 +156,7 @@ final class Updater
 
         $result['ok'] = true;
         $result['message'] = sprintf(
-            'Оновлено до v%s. Файлів застосовано: %d. Папки config/, modules/ та themes/ не чіпаються автооновленням — оновлюйте їх вручну, якщо вони кастомізовані для цього сайту.%s',
+            'Оновлено до v%s. Файлів застосовано: %d. config/ та кастомізовані modules/themes не чіпалися — див. довідку про автооновлення.%s',
             $check['latest_version'],
             $applied,
             $backupPath ? ' Резервна копія: ' . basename($backupPath) : ''
@@ -205,27 +205,70 @@ final class Updater
     }
 
     /**
-     * Paths (relative to BASE_PATH, top-level segment only) that an
-     * automatic core update must never overwrite.
-     *
      * config/ holds per-site choices (active theme, editor, etc.) that a
      * site owner sets through the admin UI or by hand — blindly copying the
      * generic release's config/ui.php over it silently resets things like a
-     * custom frontend_theme back to "default".
+     * custom frontend_theme back to "default", so it's never touched here.
      *
-     * modules/ and themes/ are where forks customize bundled code for a
-     * specific client site (a bespoke frontend theme, a rewritten module
-     * view). A customized fork of the Portfolio module got silently
-     * replaced by the generic version this way — different CSS class names,
-     * different copy — breaking the live site's styling with no error or
-     * warning. Bundled modules/themes only get updated in a fork by hand
-     * (or by choice, not by this automatic step) once they've diverged.
+     * modules/ and themes/frontend/ are where forks customize bundled code
+     * for a specific client site (a bespoke frontend theme, a rewritten
+     * module view) — a customized Portfolio module got silently replaced by
+     * the generic version this way, breaking a live site's styling with no
+     * error at all. But blanket-protecting *all* of themes/ (an earlier,
+     * cruder version of this) turned out to also freeze themes/admin/jura/
+     * forever — the shared CMS backend UI, which essentially never gets
+     * hand-edited per site — so a genuine admin UI feature (this module zip
+     * uploader) could never reach an already-running site again either.
+     *
+     * The rule actually needs to distinguish "shared CMS code" from "this
+     * site's customization", not just "core vs. not core":
+     *   - themes/admin/**           always safe to update (shared backend UI)
+     *   - themes/frontend/default/** always safe to update (the stock theme;
+     *     updating it is a no-op for any site actively running its own
+     *     custom theme instead)
+     *   - themes/frontend/{other}/** left alone (a per-site custom theme)
+     *   - modules/{X}/**            left alone only if that module directory
+     *     already exists locally (may have been customized) — a module the
+     *     site doesn't have yet (like Git Deploy on a fork predating it) is
+     *     still added automatically, since there's nothing there to clobber.
      */
-    private const UPDATE_PROTECTED_PATHS = ['config', 'modules', 'themes'];
+    private static function isUpdateProtected(string $relative, array $preexistingModuleDirs): bool
+    {
+        $segments = explode('/', $relative);
+        $top = $segments[0] ?? '';
+
+        if ($top === 'config') {
+            return true;
+        }
+
+        if ($top === 'themes') {
+            $area = $segments[1] ?? '';
+            $theme = $segments[2] ?? '';
+            if ($area === 'admin') {
+                return false;
+            }
+            if ($area === 'frontend') {
+                return $theme !== 'default';
+            }
+            return true;
+        }
+
+        if ($top === 'modules') {
+            $moduleDir = $segments[1] ?? '';
+            return $moduleDir !== '' && isset($preexistingModuleDirs[$moduleDir]);
+        }
+
+        return false;
+    }
 
     private static function copyRecursive(string $from, string $to): int
     {
         $count = 0;
+        $preexistingModuleDirs = [];
+        foreach (glob($to . '/modules/*', GLOB_ONLYDIR) ?: [] as $dir) {
+            $preexistingModuleDirs[basename($dir)] = true;
+        }
+
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($from, \FilesystemIterator::SKIP_DOTS),
             \RecursiveIteratorIterator::SELF_FIRST
@@ -233,8 +276,7 @@ final class Updater
         $baseLen = strlen($from) + 1;
         foreach ($iterator as $item) {
             $relative = substr($item->getPathname(), $baseLen);
-            $topLevel = explode('/', $relative, 2)[0];
-            if (in_array($topLevel, self::UPDATE_PROTECTED_PATHS, true)) {
+            if (self::isUpdateProtected($relative, $preexistingModuleDirs)) {
                 continue;
             }
             $target = $to . '/' . $relative;
