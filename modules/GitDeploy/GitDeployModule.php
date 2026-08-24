@@ -550,11 +550,27 @@ function git_deploy_rrmdir(string $dir): void
 }
 
 // ── SSH key generation ───────────────────────────────────────────────────
+function git_deploy_find_ssh_keygen(): string
+{
+    // `which` alone is unreliable here: PHP-FPM's shell_exec() often runs
+    // with a much narrower PATH than an interactive root shell, so a
+    // package being installed (confirmed via `rpm -q`/`dpkg -l` on the
+    // server) doesn't mean `which ssh-keygen` finds it from PHP. Same
+    // hardcoded-paths-first strategy as git_deploy_find_git().
+    foreach (['/usr/bin/ssh-keygen', '/usr/local/bin/ssh-keygen', '/opt/local/bin/ssh-keygen', '/opt/homebrew/bin/ssh-keygen'] as $p) {
+        if (is_executable($p)) {
+            return $p;
+        }
+    }
+    $out = trim(safe_shell_exec('which ssh-keygen 2>/dev/null'));
+    return ($out !== '' && is_executable($out)) ? $out : '';
+}
+
 function git_deploy_generate_ssh_key(): array
 {
-    $sshKeygen = trim(safe_shell_exec('which ssh-keygen 2>/dev/null'));
-    if ($sshKeygen === '' || !is_executable($sshKeygen)) {
-        return ['success' => false, 'error' => 'На сервері не знайдено ssh-keygen. Згенеруйте пару ключів на своєму комп’ютері (ssh-keygen -t ed25519) і вставте приватний ключ у поле нижче.'];
+    $sshKeygen = git_deploy_find_ssh_keygen();
+    if ($sshKeygen === '') {
+        return ['success' => false, 'error' => 'На сервері не знайдено ssh-keygen (перевірено /usr/bin, /usr/local/bin та PATH). Згенеруйте пару ключів на своєму комп’ютері (ssh-keygen -t ed25519) і вставте приватний ключ у поле нижче.'];
     }
 
     $keyPath = git_deploy_ssh_key_path();
