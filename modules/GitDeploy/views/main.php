@@ -158,6 +158,52 @@ $configInfo = $config_info ?? [];
 </section>
 
 <details class="jura-card" style="margin-bottom:1rem">
+  <summary style="cursor:pointer;font-weight:700">🔑 Змінити адресу репозиторію / спосіб автентифікації</summary>
+  <div class="jura-alert" style="margin-top:1rem">
+    Репозиторій вже підключено — форма нижче лише оновлює remote-адресу та/або спосіб автентифікації, файли сайту не чіпаються. Використайте це, якщо <strong>git pull</strong> падає з помилкою на кшталт <code>could not read Username for 'https://github.com'</code> — це означає, що для приватного репозиторію ще не налаштована автентифікація.
+  </div>
+  <form method="post" action="/admin/gitdeploy/init" style="margin-top:1rem">
+    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+    <div class="jura-grid jura-grid-2" style="gap:1rem">
+      <div>
+        <label class="jura-label">Адреса репозиторію</label>
+        <input class="jura-input" name="remote_url" value="<?= e($info['remote'] ?? '') ?>" required>
+      </div>
+      <div>
+        <label class="jura-label">Гілка</label>
+        <input class="jura-input" name="branch" value="<?= e($info['branch'] ?? 'main') ?>">
+      </div>
+    </div>
+    <?php $curAuth = $settings['gitdeploy_auth_type'] ?? 'none'; ?>
+    <div style="margin-top:1rem">
+      <label class="jura-label">Автентифікація</label>
+      <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.4rem">
+        <label style="display:flex;gap:.4rem;align-items:center"><input type="radio" name="auth_type" value="none" <?= $curAuth === 'none' ? 'checked' : '' ?> onchange="gdToggleAuthReconnect(this)"> Без автентифікації (публічний репозиторій)</label>
+        <label style="display:flex;gap:.4rem;align-items:center"><input type="radio" name="auth_type" value="https_token" <?= $curAuth === 'https_token' ? 'checked' : '' ?> onchange="gdToggleAuthReconnect(this)"> HTTPS-токен</label>
+        <label style="display:flex;gap:.4rem;align-items:center"><input type="radio" name="auth_type" value="ssh_key" <?= $curAuth === 'ssh_key' ? 'checked' : '' ?> onchange="gdToggleAuthReconnect(this)"> SSH-ключ</label>
+      </div>
+    </div>
+    <div id="gd-auth-token-reconnect" style="display:<?= $curAuth === 'https_token' ? 'block' : 'none' ?>;margin-top:.75rem">
+      <label class="jura-label">Personal Access Token (GitHub)</label>
+      <input class="jura-input" type="password" name="token" placeholder="ghp_...">
+      <p style="color:#64748b;font-size:.8rem;margin:.35rem 0 0">Залиште порожнім, щоб зберегти раніше збережений токен без змін.</p>
+    </div>
+    <div id="gd-auth-ssh-reconnect" style="display:<?= $curAuth === 'ssh_key' ? 'block' : 'none' ?>;margin-top:.75rem">
+      <label class="jura-label">Приватний SSH-ключ (залиште порожнім, якщо вже згенеровано раніше)</label>
+      <textarea class="jura-input" name="ssh_key" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----" style="font-family:monospace;font-size:.8rem"></textarea>
+      <button class="jura-btn jura-btn-secondary" type="submit" formaction="/admin/gitdeploy/generate-ssh-key" style="margin-top:.5rem">Згенерувати SSH-ключ на сервері</button>
+    </div>
+    <button class="jura-btn jura-btn-primary" type="submit" style="margin-top:1.2rem">Оновити підключення</button>
+  </form>
+  <script>
+  function gdToggleAuthReconnect(radio) {
+    document.getElementById('gd-auth-token-reconnect').style.display = radio.value === 'https_token' ? 'block' : 'none';
+    document.getElementById('gd-auth-ssh-reconnect').style.display = radio.value === 'ssh_key' ? 'block' : 'none';
+  }
+  </script>
+</details>
+
+<details class="jura-card" style="margin-bottom:1rem">
   <summary style="cursor:pointer;font-weight:700">Налаштування</summary>
   <form method="post" action="/admin/gitdeploy/init" style="margin-top:1rem">
     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">

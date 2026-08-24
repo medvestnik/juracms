@@ -365,10 +365,17 @@ function git_deploy_init_repo(PDO $pdo, array $data): array
 
     save_setting($pdo, 'gitdeploy_auth_type', $authType, 'gitdeploy');
     if ($authType === 'https_token') {
-        if ($token === '') {
+        // A blank token on a reconnect (auth type already was https_token,
+        // just changing the remote URL/branch or re-saving other settings)
+        // means "keep the previously saved token" — only a brand-new
+        // https_token setup, with nothing saved yet, requires typing one in.
+        $existingToken = trim((string) (git_deploy_settings($pdo)['gitdeploy_git_token'] ?? ''));
+        if ($token === '' && $existingToken === '') {
             return ['success' => false, 'error' => 'Вкажіть токен доступу'];
         }
-        save_setting($pdo, 'gitdeploy_git_token', $token, 'gitdeploy');
+        if ($token !== '') {
+            save_setting($pdo, 'gitdeploy_git_token', $token, 'gitdeploy');
+        }
     } elseif ($authType === 'ssh_key') {
         if (trim($sshKey) !== '') {
             file_put_contents(git_deploy_ssh_key_path(), rtrim($sshKey) . "\n");
