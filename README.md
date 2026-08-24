@@ -9,3 +9,7 @@ Jura CMS после установки через `/install/` создает б�
 ## Пользователи и группы
 
 Используются `jura_users` и `jura_user_groups` (вместо `admins`). Права задаются через `jura_permissions` + `jura_group_permissions`.
+
+## Модули
+
+Структура модуля, версионирование (semver) и правило именования ZIP-архива для загрузки через `/admin/modules` — см. [`docs/modules.md`](docs/modules.md).
