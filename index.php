@@ -9,6 +9,7 @@ if (is_file($autoload)) {
 require_once __DIR__ . '/core/start.php';
 
 use App\Core\ModuleLoader;
+use App\Core\Theme;
 use Core\Installer\Runtime as InstallerRuntime;
 
 function admin_db(): PDO
@@ -809,8 +810,21 @@ if (str_starts_with($path, '/admin')) {
         $themeSlug = $_tmatch[1] ?? null;
 
         if ($method === 'POST' && !$themeSlug) {
+            $action = (string) ($_POST['action'] ?? '');
+            if ($action === 'upload') {
+                $file = $_FILES['theme_zip'] ?? null;
+                if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+                    session_flash('themes_error', 'Не вдалося завантажити файл.');
+                } elseif (strtolower((string) pathinfo($file['name'], PATHINFO_EXTENSION)) !== 'zip') {
+                    session_flash('themes_error', 'Очікується ZIP-архів.');
+                } else {
+                    $upload = Theme::installFromZip($file['tmp_name']);
+                    session_flash($upload['ok'] ? 'themes_success' : 'themes_error', $upload['message']);
+                }
+                redirect('/admin/themes');
+            }
             $activateSlug = preg_replace('/[^a-z0-9_-]/', '', $_POST['slug'] ?? '');
-            if ($activateSlug && ($_POST['action'] ?? '') === 'activate') {
+            if ($activateSlug && $action === 'activate') {
                 // Update config/ui.php
                 $cfgFile = BASE_PATH . '/config/ui.php';
                 $cfgContent = file_get_contents($cfgFile);
@@ -858,7 +872,13 @@ if (str_starts_with($path, '/admin')) {
 
             view_admin('theme-detail', ['title' => 'Тема: ' . ($theme['name'] ?? $themeSlug), 'theme' => $theme, 'files' => $files]);
         } else {
-            view_admin('themes', ['title' => 'Шаблони', 'themes' => $allThemes, 'active_theme' => $activeTheme]);
+            view_admin('themes', [
+                'title' => 'Шаблони',
+                'themes' => $allThemes,
+                'active_theme' => $activeTheme,
+                'flash_success' => session_flash('themes_success'),
+                'flash_error' => session_flash('themes_error'),
+            ]);
         }
         exit;
     }

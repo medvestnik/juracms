@@ -1,4 +1,6 @@
-# Модулі JuraCMS
+# Модулі та теми JuraCMS
+
+Модулі (`modules/`) і фронтенд-теми (`themes/frontend/`) — окремі, незалежно версійовані пакунки коду. Все, що описано нижче для модулів (semver, формат ZIP, `/admin/modules → Завантажити`), справедливе і для тем один-в-один — тільки маніфест називається `theme.json` замість `module.json`, а завантаження відбувається на **/admin/themes → Завантажити тему (ZIP)** через `Theme::installFromZip()` (замість `ModuleLoader::installFromZip()`). Приклад для теми — у самому кінці файлу.
 
 ## Структура
 
@@ -63,3 +65,26 @@ zip -r "GitDeploy-v${VERSION}.zip" modules/GitDeploy -x '.*'
 ## Один сайт, кастомізований модуль
 
 Якщо конкретний сайт (форк) відредагував файли модуля під себе, "Оновити зараз" (автооновлення CMS до нового релізу) **не** буде перезаписувати вже встановлену директорію цього модуля — див. `core/Updater/Updater.php::isUpdateProtected()`. Оновлення такого модуля — свідома дія: завантажити новий ZIP вручну (і за потреби перенести кастомізацію в нову версію) або відредагувати файли напряму.
+
+Та сама логіка для тем: `themes/frontend/default/` оновлюється автоматично (це стокова тема), а будь-яка інша (кастомна) — ні.
+
+## Приклад для теми: `theme.json` і ZIP
+
+```json
+{
+  "name": "Jura Default",
+  "slug": "default",
+  "version": "0.2.0",
+  "type": "frontend",
+  "description": "...",
+  "author": "Jura CMS",
+  "ui_kit": "jura-ui"
+}
+```
+
+```bash
+VERSION=$(php -r '$m=json_decode(file_get_contents("themes/frontend/MyTheme/theme.json"),true); echo $m["version"];')
+zip -r "MyTheme-v${VERSION}.zip" themes/frontend/MyTheme -x '.*'
+```
+
+Архів — `MyTheme-v1.0.0.zip`, один кореневий каталог `MyTheme/` усередині з тим самим іменем, що на диску. Завантажте через **/admin/themes → Завантажити тему (ZIP)**.

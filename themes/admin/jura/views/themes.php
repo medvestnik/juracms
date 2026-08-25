@@ -7,6 +7,24 @@
   </p>
 </div>
 
+<?php if (!empty($flash_success)): ?>
+<div class="jura-alert" style="background:#d1fae5;border-color:#6ee7b7;color:#065f46;margin-bottom:1rem"><?= e($flash_success) ?></div>
+<?php endif; ?>
+<?php if (!empty($flash_error)): ?>
+<div class="jura-alert" style="background:#fff1f2;border-color:#fecdd3;color:#9f1239;margin-bottom:1rem"><?= e($flash_error) ?></div>
+<?php endif; ?>
+
+<section class="jura-card" style="margin-bottom:1.5rem">
+  <h2 style="margin-top:0;font-size:1rem">Завантажити тему (ZIP)</h2>
+  <p style="color:#64748b;font-size:.85rem;margin:0 0 1rem">Завантажте .zip з файлами теми (theme.json, layouts/, views/, assets/...) — вона з'явиться нижче зі статусом «Не активний», після чого натисніть «Активувати».</p>
+  <form method="post" enctype="multipart/form-data" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+    <input type="hidden" name="action" value="upload">
+    <input class="jura-input" style="margin:0;max-width:320px" type="file" name="theme_zip" accept=".zip" required>
+    <button class="jura-btn jura-btn-primary" type="submit">Завантажити</button>
+  </form>
+</section>
+
 <?php if (empty($themes)): ?>
 <section class="jura-card">
   <p style="color:#888">Шаблонів не знайдено. Помістіть тему у директорію <code>themes/frontend/</code>.</p>
