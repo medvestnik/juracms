@@ -10,6 +10,15 @@ function hotel_ensure_schema(PDO $pdo): void
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_room_amenities') . " (room_id INT UNSIGNED NOT NULL,amenity_id INT UNSIGNED NOT NULL,PRIMARY KEY(room_id,amenity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_promotions') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,slug VARCHAR(191) UNIQUE,title VARCHAR(191),excerpt TEXT NULL,content MEDIUMTEXT NULL,status VARCHAR(20) DEFAULT 'draft',featured_image_id INT UNSIGNED NULL,meta_title VARCHAR(191) NULL,meta_description TEXT NULL,sort_order INT DEFAULT 0,published_at TIMESTAMP NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_room_rates') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,room_id INT UNSIGNED NOT NULL,tariff VARCHAR(191) NOT NULL,guests TINYINT UNSIGNED DEFAULT 1,price DECIMAL(12,2) DEFAULT 0,sort_order INT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // hotel_galleries must exist before the column-backfill loop below,
+    // since that loop ALTERs it (locale column) -- on a brand-new install
+    // (no tables yet at all) creating it after the loop instead meant the
+    // loop's SHOW COLUMNS FROM hotel_galleries threw an uncaught
+    // PDOException on every single request (this function doubles as the
+    // ensure_schema hook, which runs on every admin page), a permanent
+    // white-page crash the moment the module was first installed.
+    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_galleries') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,slug VARCHAR(191) UNIQUE,title VARCHAR(191),description TEXT NULL,status VARCHAR(20) DEFAULT 'active',meta_title VARCHAR(191) NULL,meta_description TEXT NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_gallery_images') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,gallery_id INT UNSIGNED,media_file_id INT UNSIGNED,alt VARCHAR(191) NULL,title VARCHAR(191) NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     // Add featured_image and show_similar_rooms columns if missing
     foreach ([
         ['hotel_rooms', 'featured_image', 'VARCHAR(255) NULL'],
@@ -27,8 +36,6 @@ function hotel_ensure_schema(PDO $pdo): void
             $pdo->exec("ALTER TABLE `{$tn}` ADD `{$col}` {$def}");
         }
     }
-    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_galleries') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,slug VARCHAR(191) UNIQUE,title VARCHAR(191),description TEXT NULL,status VARCHAR(20) DEFAULT 'active',meta_title VARCHAR(191) NULL,meta_description TEXT NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_gallery_images') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,gallery_id INT UNSIGNED,media_file_id INT UNSIGNED,alt VARCHAR(191) NULL,title VARCHAR(191) NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     // Tourist tax default settings + page-content shortcode placeholders (see hotel_filter_page_content)
     foreach ([
         ['hotel_tourist_tax_ua_enabled',      '0',           'hotel'],
