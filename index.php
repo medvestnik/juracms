@@ -9,6 +9,7 @@ if (is_file($autoload)) {
 require_once __DIR__ . '/core/start.php';
 
 use App\Core\ModuleLoader;
+use App\Core\Theme;
 use Core\Installer\Runtime as InstallerRuntime;
 
 function admin_db(): PDO
@@ -809,8 +810,21 @@ if (str_starts_with($path, '/admin')) {
         $themeSlug = $_tmatch[1] ?? null;
 
         if ($method === 'POST' && !$themeSlug) {
+            $action = (string) ($_POST['action'] ?? '');
+            if ($action === 'upload') {
+                $file = $_FILES['theme_zip'] ?? null;
+                if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+                    session_flash('themes_error', 'Не вдалося завантажити файл.');
+                } elseif (strtolower((string) pathinfo($file['name'], PATHINFO_EXTENSION)) !== 'zip') {
+                    session_flash('themes_error', 'Очікується ZIP-архів.');
+                } else {
+                    $upload = Theme::installFromZip($file['tmp_name']);
+                    session_flash($upload['ok'] ? 'themes_success' : 'themes_error', $upload['message']);
+                }
+                redirect('/admin/themes');
+            }
             $activateSlug = preg_replace('/[^a-z0-9_-]/', '', $_POST['slug'] ?? '');
-            if ($activateSlug && ($_POST['action'] ?? '') === 'activate') {
+            if ($activateSlug && $action === 'activate') {
                 // Update config/ui.php
                 $cfgFile = BASE_PATH . '/config/ui.php';
                 $cfgContent = file_get_contents($cfgFile);
@@ -858,7 +872,13 @@ if (str_starts_with($path, '/admin')) {
 
             view_admin('theme-detail', ['title' => 'Тема: ' . ($theme['name'] ?? $themeSlug), 'theme' => $theme, 'files' => $files]);
         } else {
-            view_admin('themes', ['title' => 'Шаблони', 'themes' => $allThemes, 'active_theme' => $activeTheme]);
+            view_admin('themes', [
+                'title' => 'Шаблони',
+                'themes' => $allThemes,
+                'active_theme' => $activeTheme,
+                'flash_success' => session_flash('themes_success'),
+                'flash_error' => session_flash('themes_error'),
+            ]);
         }
         exit;
     }
@@ -989,6 +1009,11 @@ if (str_starts_with($path, '/admin')) {
                 }
                 redirect('/admin/updates');
             }
+            if ($action === 'restore_backup') {
+                $restoreResult = \Core\Updater\Updater::restoreBackup((string) ($_POST['filename'] ?? ''));
+                session_flash($restoreResult['ok'] ? 'upd_success' : 'upd_error', $restoreResult['message']);
+                redirect('/admin/updates');
+            }
         }
 
         $errorLogFile = BASE_PATH . '/logs/php-error.log';
@@ -997,7 +1022,7 @@ if (str_starts_with($path, '/admin')) {
             $lines = file($errorLogFile, FILE_IGNORE_NEW_LINES) ?: [];
             $errorLogTail = implode("\n", array_slice($lines, -100));
         }
-        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
+        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'backups' => \Core\Updater\Updater::listBackups(), 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
         exit;
     }
 
