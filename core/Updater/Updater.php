@@ -165,6 +165,100 @@ final class Updater
         return $result;
     }
 
+    /**
+     * Backups newest-first, for an admin "restore" list — each pre-update
+     * .zip written by backupCurrentInstall().
+     */
+    public static function listBackups(): array
+    {
+        $backupDir = BASE_PATH . '/storage/backups';
+        $backups = [];
+        foreach (glob($backupDir . '/pre-update-*.zip') ?: [] as $path) {
+            $backups[] = [
+                'filename' => basename($path),
+                'size' => filesize($path) ?: 0,
+                'created_at' => filemtime($path) ?: 0,
+            ];
+        }
+        usort($backups, static fn(array $a, array $b): int => $b['created_at'] <=> $a['created_at']);
+        return $backups;
+    }
+
+    /**
+     * Restores a previously-made backup by extracting it back over
+     * BASE_PATH. Unlike a regular update, this intentionally does NOT run
+     * the same isUpdateProtected() filtering — a rollback means "put back
+     * exactly what this backup captured", including config/modules/themes
+     * as they were at backup time. It also never deletes anything: a file
+     * added since the backup (e.g. a module installed afterward) is simply
+     * left alone, matching how the automatic updater itself never deletes.
+     */
+    public static function restoreBackup(string $filename): array
+    {
+        $result = ['ok' => false, 'message' => '', 'files_applied' => 0];
+
+        $safeName = basename($filename);
+        if ($safeName === '' || !preg_match('/^pre-update-[0-9]{8}-[0-9]{6}\.zip$/', $safeName)) {
+            $result['message'] = 'Некоректна назва файлу резервної копії.';
+            return $result;
+        }
+
+        $path = BASE_PATH . '/storage/backups/' . $safeName;
+        if (!is_file($path)) {
+            $result['message'] = 'Файл резервної копії не знайдено.';
+            return $result;
+        }
+
+        if (!class_exists(\ZipArchive::class)) {
+            $result['message'] = 'Розширення PHP ZipArchive недоступне на цьому хостингу.';
+            return $result;
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/jura-restore-' . bin2hex(random_bytes(4));
+        if (!@mkdir($tmpDir, 0775, true)) {
+            $result['message'] = 'Не вдалося створити тимчасову директорію.';
+            return $result;
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) {
+            self::rrmdir($tmpDir);
+            $result['message'] = 'Не вдалося відкрити файл резервної копії.';
+            return $result;
+        }
+        $zip->extractTo($tmpDir);
+        $zip->close();
+
+        $applied = 0;
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($tmpDir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
+        );
+        $baseLen = strlen($tmpDir) + 1;
+        foreach ($iterator as $item) {
+            $target = BASE_PATH . '/' . substr($item->getPathname(), $baseLen);
+            if ($item->isDir()) {
+                if (!is_dir($target)) {
+                    @mkdir($target, 0775, true);
+                }
+                continue;
+            }
+            $targetDir = dirname($target);
+            if (!is_dir($targetDir)) {
+                @mkdir($targetDir, 0775, true);
+            }
+            if (@copy($item->getPathname(), $target)) {
+                $applied++;
+            }
+        }
+        self::rrmdir($tmpDir);
+
+        $result['ok'] = true;
+        $result['files_applied'] = $applied;
+        $result['message'] = sprintf('Відновлено з %s. Файлів застосовано: %d.', $safeName, $applied);
+        return $result;
+    }
+
     private static function backupCurrentInstall(): ?string
     {
         if (!class_exists(\ZipArchive::class)) {

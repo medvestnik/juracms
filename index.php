@@ -1009,6 +1009,11 @@ if (str_starts_with($path, '/admin')) {
                 }
                 redirect('/admin/updates');
             }
+            if ($action === 'restore_backup') {
+                $restoreResult = \Core\Updater\Updater::restoreBackup((string) ($_POST['filename'] ?? ''));
+                session_flash($restoreResult['ok'] ? 'upd_success' : 'upd_error', $restoreResult['message']);
+                redirect('/admin/updates');
+            }
         }
 
         $errorLogFile = BASE_PATH . '/logs/php-error.log';
@@ -1017,7 +1022,7 @@ if (str_starts_with($path, '/admin')) {
             $lines = file($errorLogFile, FILE_IGNORE_NEW_LINES) ?: [];
             $errorLogTail = implode("\n", array_slice($lines, -100));
         }
-        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
+        view_admin('updates', ['title' => 'Оновлення', 'current_version' => $currentVersion, 'installed_at' => $lockData['installed_at'] ?? '', 'git_remote' => $gitRemote, 'git_branch' => $gitBranch, 'git_last_commit' => $gitLastCommit, 'error_log_tail' => $errorLogTail, 'update_check' => $_SESSION['update_check'] ?? null, 'backups' => \Core\Updater\Updater::listBackups(), 'flash_success' => session_flash('upd_success'), 'flash_error' => session_flash('upd_error')]);
         exit;
     }
 

@@ -79,6 +79,39 @@ $check = $update_check ?? null;
   </form>
 </details>
 
+<section class="jura-card" style="margin-bottom:1rem">
+  <h2 style="margin-top:0">Резервні копії</h2>
+  <p style="color:#64748b;font-size:.85rem;margin:0 0 1rem">Перед кожним «Оновити зараз» автоматично зберігається копія файлів сайту (без <code>storage/</code>, <code>uploads/</code>, <code>cache/</code>, <code>logs/</code>) у <code>storage/backups/</code>. Відновлення повертає файли з обраної копії — нічого поверх неї не видаляється, тож те, що з'явилося вже після цієї копії (наприклад, новий модуль), лишиться на місці.</p>
+  <?php $backups = $backups ?? []; ?>
+  <?php if (empty($backups)): ?>
+  <p style="color:#888">Резервних копій ще немає — вони з'являються після першого «Оновити зараз».</p>
+  <?php else: ?>
+  <table class="jura-table">
+    <thead><tr><th>Файл</th><th>Розмір</th><th>Створено</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($backups as $b): ?>
+    <tr>
+      <td><code><?= e($b['filename']) ?></code></td>
+      <td style="font-size:.85rem;color:#64748b"><?= e(number_format($b['size'] / 1048576, 1)) ?> МБ</td>
+      <td style="font-size:.85rem;color:#64748b"><?= e(date('Y-m-d H:i', $b['created_at'])) ?></td>
+      <td>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+          <input type="hidden" name="action" value="restore_backup">
+          <input type="hidden" name="filename" value="<?= e($b['filename']) ?>">
+          <button class="jura-btn" type="submit" style="padding:.3rem .7rem;font-size:.83rem;background:#fff1f2;color:#9f1239;border:1px solid #fecdd3"
+            onclick="return confirm('Відновити файли сайту з резервної копії «<?= e($b['filename']) ?>»? Поточні файли (крім тих, що зявилися вже після копії) будуть замінені.')">
+            ↩ Відновити
+          </button>
+        </form>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php endif; ?>
+</section>
+
 <section class="jura-card" style="margin-top:1rem">
   <h2 style="margin-top:0">Останні помилки (logs/php-error.log)</h2>
   <?php if (empty($error_log_tail)): ?>
