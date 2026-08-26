@@ -48,6 +48,7 @@ function hotel_ensure_schema(PDO $pdo): void
         ['hotel_tourist_tax_extra_note',      '',            'hotel'],
         ['booking_page_form',                 '',            'hotel'],
         ['booking_search_form',               '',            'hotel'],
+        ['booking_widget_head',               '',            'hotel'],
     ] as [$key, $val, $group]) {
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?)')
             ->execute([$key, $val, 'string', $group]);
@@ -162,6 +163,16 @@ function hotel_filter_page_content(string $content, array $settings): string
         '{{ booking-page-form }}'   => $settings['booking_page_form']   ?? '',
         '{{ booking-search-form }}' => $settings['booking_search_form'] ?? '',
     ]);
+}
+
+// ── Hook: head_scripts ───────────────────────────────────────────────────────
+// Injects the Exely head_script snippet (head_script-uk from the Exely
+// booking-engine archive) into <head> on every frontend page, via
+// ModuleLoader::hookRender('head_scripts', $settings) — see
+// themes/frontend/default/layouts/app.php.
+function hotel_head_scripts(array $settings): string
+{
+    return (string) ($settings['booking_widget_head'] ?? '');
 }
 
 function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
@@ -459,6 +470,21 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         }
         $s = cms_settings($pdo);
         view_admin('hotel/tax', ['title' => 'Туристичний збір', 's' => $s, 'success' => session_flash('tax_success')]);
+        return true;
+    }
+
+    if ($path === '/admin/hotel/booking') {
+        $bookingKeys = ['booking_widget_head', 'booking_search_form', 'booking_page_form'];
+        if ($method === 'POST') {
+            foreach ($bookingKeys as $key) {
+                $pdo->prepare('INSERT INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')
+                    ->execute([$key, (string) ($_POST[$key] ?? ''), 'string', 'hotel']);
+            }
+            session_flash('booking_success', 'Збережено');
+            redirect('/admin/hotel/booking');
+        }
+        $s = cms_settings($pdo);
+        view_admin('hotel/booking', ['title' => 'Exely / Бронювання', 's' => $s, 'success' => session_flash('booking_success')]);
         return true;
     }
 
