@@ -579,8 +579,40 @@ if (str_starts_with($path, '/admin')) {
     }
 
     if ($path === '/admin/pages' && $method === 'GET') {
-        $pages = $pdo->query('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id ORDER BY p.sort_order,p.id")->fetchAll();
-        view_admin('pages', ['title' => 'Сторінки', 'pages' => $pages, 'edit' => null]);
+        $sortMap = ['date' => 'p.updated_at', 'title' => 'p.title', 'id' => 'p.id', 'order' => 'p.sort_order'];
+        $sort = array_key_exists($_GET['sort'] ?? '', $sortMap) ? $_GET['sort'] : 'order';
+        $dir = ($sort === 'order') ? 'ASC' : ((($_GET['dir'] ?? '') === 'asc') ? 'ASC' : 'DESC');
+        $perPageOpts = [20, 25, 30, 50, 100, 200];
+        $perPage = in_array((int) ($_GET['per_page'] ?? 20), $perPageOpts) ? (int) ($_GET['per_page'] ?? 20) : 20;
+        $total = (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table('pages'))->fetchColumn();
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        $curPage = max(1, min($totalPages, (int) ($_GET['page'] ?? 1)));
+        $offset = ($curPage - 1) * $perPage;
+        $orderCol = $sortMap[$sort];
+        $query = 'SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id ORDER BY {$orderCol} {$dir}, p.id DESC LIMIT {$perPage} OFFSET {$offset}";
+        view_admin('pages', [
+            'title' => 'Сторінки',
+            'pages' => $pdo->query($query)->fetchAll(),
+            'edit' => null,
+            'sort' => $sort,
+            'dir' => $dir,
+            'per_page' => $perPage,
+            'per_page_opts' => $perPageOpts,
+            'cur_page' => $curPage,
+            'total_pages' => $totalPages,
+            'total' => $total,
+        ]);
+        exit;
+    }
+    if ($path === '/admin/pages/reorder' && $method === 'POST') {
+        $ids = json_decode($_POST['ids'] ?? '[]', true);
+        if (is_array($ids)) {
+            foreach ($ids as $i => $id) {
+                $pdo->prepare('UPDATE ' . jura_table('pages') . ' SET sort_order=? WHERE id=?')->execute([$i + 1, (int) $id]);
+            }
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
         exit;
     }
     if ($path === '/admin/pages/create' && $method === 'GET') {
