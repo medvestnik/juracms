@@ -98,6 +98,27 @@ if (!function_exists('view_frontend')) {
     }
 }
 
+if (!function_exists('page_template_options')) {
+    /** Template choices for the /admin/pages "Шаблон" dropdown: core built-ins
+     * plus whatever installed modules contribute via the page_templates hook
+     * (e.g. Hotel's hotel_rooms/hotel_booking) -- see
+     * ModuleLoader::hookCollect('page_templates'). Without this, saving an
+     * edit to a module-templated page would silently reset its template back
+     * to "page" the moment the dropdown doesn't list the current value. */
+    function page_template_options(): array
+    {
+        $core = [
+            'page'     => 'Сторінка',
+            'home'     => 'Головна',
+            'blog'     => 'Блог',
+            'contacts' => 'Контакти',
+            'about'    => 'Про нас',
+        ];
+
+        return $core + \App\Core\ModuleLoader::hookCollect('page_templates');
+    }
+}
+
 if (!function_exists('installer_warning')) {
     function installer_warning(): ?string
     {

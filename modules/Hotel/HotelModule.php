@@ -53,6 +53,31 @@ function hotel_ensure_schema(PDO $pdo): void
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?)')
             ->execute([$key, $val, 'string', $group]);
     }
+    hotel_seed_pages($pdo);
+}
+
+// Creates editable jura_pages/routes for /rooms and /booking (if missing) so
+// they show up in Сторінки/Меню like any other page, and can carry admin-
+// written intro content above the module's own listing/booking-form markup
+// -- see hotel_render_page_template() and the render_page_template hook.
+function hotel_seed_pages(PDO $pdo): void
+{
+    $authorId = (int) $pdo->query('SELECT id FROM ' . jura_table('users') . ' ORDER BY id LIMIT 1')->fetchColumn();
+    foreach ([
+        ['rooms', 'Номери', 'hotel_rooms', ''],
+        ['booking', 'Бронювання', 'hotel_booking', '{{ booking-page-form }}'],
+    ] as [$slug, $title, $template, $content]) {
+        $existing = $pdo->prepare('SELECT id FROM ' . jura_table('pages') . ' WHERE slug=? LIMIT 1');
+        $existing->execute([$slug]);
+        $pageId = (int) $existing->fetchColumn();
+        if (!$pageId) {
+            $ins = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,status,template,meta_title,sort_order,published_at) VALUES (?,?,?,?,?,?,?,?,NOW())');
+            $ins->execute([$authorId, $title, $slug, $content, 'published', $template, $title, 0]);
+            $pageId = (int) $pdo->lastInsertId();
+        }
+        $pdo->prepare('INSERT IGNORE INTO ' . jura_table('routes') . ' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')
+            ->execute(['/' . $slug, 'page', $pageId, 'active']);
+    }
 }
 
 function hotel_save_rates(PDO $pdo, int $roomId, array $rates): void
@@ -498,12 +523,11 @@ function hotel_handle_frontend(string $path, PDO $pdo): bool
     // same way core page/post routing does, so /en/rooms works too.
     [$locale, $path] = current_locale($pdo, $path);
 
-    if ($path === '/rooms') {
-        $stmt = $pdo->prepare('SELECT r.*,fi.title as feat_img_file FROM ' . jura_table('hotel_rooms') . ' r LEFT JOIN ' . jura_table('hotel_room_images') . ' fi ON fi.room_id=r.id AND fi.is_featured=1' . " WHERE r.status='published' AND (r.locale=? OR r.locale='') ORDER BY r.sort_order,r.id");
-        $stmt->execute([$locale]);
-        view_frontend('hotel/rooms', ['title' => 'Номери', 'rooms' => $stmt->fetchAll(), 'settings' => cms_settings($pdo), 'locale' => $locale]);
-        return true;
-    }
+    // Note: /rooms itself is no longer hardcoded here -- it's a real,
+    // editable jura_pages row (template=hotel_rooms, seeded by
+    // hotel_seed_pages()) rendered via the render_page_template hook
+    // (see hotel_render_page_template() below), so it shows up in
+    // Сторінки/Меню like any other page.
     if (preg_match('#^/rooms/([^/]+)$#', $path, $matches)) {
         $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE slug=? AND status='published' AND (locale=? OR locale='') LIMIT 1");
         $stmt->execute([$matches[1], $locale]);
@@ -562,6 +586,40 @@ function hotel_handle_frontend(string $path, PDO $pdo): bool
         }
         unset($gal);
         view_frontend('hotel/gallery', ['title' => 'Галерея', 'galleries' => $galleries, 'settings' => cms_settings($pdo), 'locale' => $locale]);
+        return true;
+    }
+    return false;
+}
+
+// ── Hook: page_templates ─────────────────────────────────────────────────────
+// Lets the "Шаблон" dropdown on /admin/pages offer this module's templates,
+// so editing the auto-created Номери/Бронювання pages doesn't silently
+// reset their template back to the generic "page" on save -- see
+// ModuleLoader::hookCollect('page_templates') in index.php / pages.php.
+function hotel_page_templates(): array
+{
+    return [
+        'hotel_rooms'   => 'Готель: Номери',
+        'hotel_booking' => 'Готель: Бронювання',
+    ];
+}
+
+// ── Hook: render_page_template ──────────────────────────────────────────────
+// Renders a jura_pages row whose template is one of this module's own
+// (hotel_rooms, hotel_booking) via ModuleLoader::hookFirst('render_page_template', ...)
+// -- see index.php's page-render branch. Returning false means "not mine",
+// so core falls back to the generic 'page' view.
+function hotel_render_page_template(array $page, array $settings, string $locale, array $common, PDO $pdo): bool
+{
+    $template = $page['template'] ?? '';
+    if ($template === 'hotel_rooms') {
+        $stmt = $pdo->prepare('SELECT r.*,fi.title as feat_img_file FROM ' . jura_table('hotel_rooms') . ' r LEFT JOIN ' . jura_table('hotel_room_images') . ' fi ON fi.room_id=r.id AND fi.is_featured=1' . " WHERE r.status='published' AND (r.locale=? OR r.locale='') ORDER BY r.sort_order,r.id");
+        $stmt->execute([$locale]);
+        view_frontend('hotel/rooms', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'rooms' => $stmt->fetchAll(), 'settings' => $settings], $common));
+        return true;
+    }
+    if ($template === 'hotel_booking') {
+        view_frontend('hotel/booking', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
         return true;
     }
     return false;

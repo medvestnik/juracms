@@ -601,6 +601,7 @@ if (str_starts_with($path, '/admin')) {
             'cur_page' => $curPage,
             'total_pages' => $totalPages,
             'total' => $total,
+            'template_options' => page_template_options(),
         ]);
         exit;
     }
@@ -616,7 +617,7 @@ if (str_starts_with($path, '/admin')) {
         exit;
     }
     if ($path === '/admin/pages/create' && $method === 'GET') {
-        view_admin('pages', ['title' => 'Додати сторінку', 'edit' => []]);
+        view_admin('pages', ['title' => 'Додати сторінку', 'edit' => [], 'template_options' => page_template_options()]);
         exit;
     }
     if ($path === '/admin/pages' && $method === 'POST') {
@@ -644,6 +645,7 @@ if (str_starts_with($path, '/admin')) {
             'edit' => $editPage,
             'translations' => $editPage ? entity_translations($pdo, 'pages', $editPage) : [],
             'all_locales' => $localeRows,
+            'template_options' => page_template_options(),
         ]);
         exit;
     }
@@ -1360,7 +1362,7 @@ if ($route) {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra)));
             } elseif (($page['template'] ?? '') === 'about') {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('about', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
-            } else {
+            } elseif (!ModuleLoader::hookFirst('render_page_template', $page, $settings, $locale, $common, $pdo)) {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             }
             exit;

@@ -79,7 +79,7 @@ endif; ?>
       <div>
         <label class="jura-label">Шаблон</label>
         <select class="jura-input" name="template">
-          <?php foreach (['page' => 'Сторінка', 'home' => 'Головна', 'blog' => 'Блог'] as $val => $label): ?>
+          <?php foreach (($template_options ?? ['page' => 'Сторінка']) as $val => $label): ?>
           <option value="<?= $val ?>" <?= ($p['template'] ?? 'page') === $val ? 'selected' : '' ?>><?= $label ?></option>
           <?php endforeach; ?>
         </select>
