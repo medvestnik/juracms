@@ -465,7 +465,7 @@ if (str_starts_with($path, '/admin')) {
     ModuleLoader::ensureTable($pdo);
     ModuleLoader::autoMigrate($pdo);
     ModuleLoader::loadInstalled($pdo);
-    ModuleLoader::hookEach('ensure_schema', $pdo);
+    ModuleLoader::ensureSchemaOnce($pdo);
 
     if ($path === '/admin') {
         view_admin('dashboard', ['title' => 'Дашборд', 'stats' => admin_stats($pdo)]);
@@ -1271,7 +1271,7 @@ $pdo = admin_db();
 ensure_cms_schema($pdo);
 ModuleLoader::ensureTable($pdo);
 ModuleLoader::loadInstalled($pdo);
-ModuleLoader::hookEach('ensure_schema', $pdo);
+ModuleLoader::ensureSchemaOnce($pdo);
 
 if ($method === 'POST' && preg_match('#^/forms/([a-zA-Z0-9_-]+)$#', $path, $matches)) {
     $payload = $_POST;
