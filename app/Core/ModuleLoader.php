@@ -205,6 +205,33 @@ final class ModuleLoader
         return $out;
     }
 
+    /**
+     * Same as hookRender(), but prefixes each module's non-empty output
+     * with a heading using that module's own registered name — so e.g. the
+     * dashboard's Hotel stat cards read as belonging to "Hotel Module"
+     * rather than blending into the core stats above them with no visual
+     * boundary at all.
+     */
+    public static function hookRenderGrouped(string $hook, mixed ...$args): string
+    {
+        $out = '';
+        foreach (self::$registry as $config) {
+            if (empty($config[$hook]) || !is_callable($config[$hook])) {
+                continue;
+            }
+            $r = ($config[$hook])(...$args);
+            if (!is_string($r) || $r === '') {
+                continue;
+            }
+            $name = (string) ($config['name'] ?? '');
+            if ($name !== '') {
+                $out .= '<h2 style="font-size:.95rem;margin:2rem 0 1rem;padding-top:1.5rem;border-top:1px solid var(--jura-border);color:var(--jura-text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700">' . \e($name) . '</h2>';
+            }
+            $out .= $r;
+        }
+        return $out;
+    }
+
     /** Pipe a value through every module's hook, each getting the previous
      * module's output — lets a module transform content generically (e.g.
      * shortcode substitution in page content) without core special-casing
