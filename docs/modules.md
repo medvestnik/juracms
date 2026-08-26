@@ -57,8 +57,10 @@ GitDeploy-v1.1.0.zip
 
 ```bash
 VERSION=$(php -r '$m=json_decode(file_get_contents("modules/GitDeploy/module.json"),true); echo $m["version"];')
-zip -r "GitDeploy-v${VERSION}.zip" modules/GitDeploy -x '.*'
+(cd modules && zip -r "../GitDeploy-v${VERSION}.zip" GitDeploy -x '.*')
 ```
+
+(запускати з кореня репозиторію; `cd modules` усередині підоболонки — обов'язково, інакше `zip -r modules/GitDeploy` кладе в архів шлях `modules/GitDeploy/...` з двома вкладеними каталогами, а не один кореневий `GitDeploy/`, і `installFromZip()` такий архів відхилить.)
 
 Завантажте отриманий файл через **/admin/modules → Завантажити модуль (ZIP)**. Якщо модуль з такою назвою директорії вже встановлено — завантаження перезапише його файли (сама установка/налаштування в БД не чіпається), тобто це водночас і спосіб оновити вже встановлений модуль.
 
@@ -84,7 +86,7 @@ zip -r "GitDeploy-v${VERSION}.zip" modules/GitDeploy -x '.*'
 
 ```bash
 VERSION=$(php -r '$m=json_decode(file_get_contents("themes/frontend/MyTheme/theme.json"),true); echo $m["version"];')
-zip -r "MyTheme-v${VERSION}.zip" themes/frontend/MyTheme -x '.*'
+(cd themes/frontend && zip -r "../../MyTheme-v${VERSION}.zip" MyTheme -x '.*')
 ```
 
 Архів — `MyTheme-v1.0.0.zip`, один кореневий каталог `MyTheme/` усередині з тим самим іменем, що на диску. Завантажте через **/admin/themes → Завантажити тему (ZIP)**.
