@@ -99,6 +99,66 @@ final class ModuleLoader
         }
     }
 
+    /**
+     * Runs each enabled module's ensure_schema hook, but only once per
+     * installed module version — not on every single page view.
+     *
+     * A module's ensure_schema typically does several CREATE TABLE IF NOT
+     * EXISTS, SHOW COLUMNS + ALTER TABLE, and INSERT IGNORE settings-seed
+     * statements. Before this, that ran on *every* request (frontend and
+     * admin both call this) for every enabled module, forever — a site
+     * with a couple of modules installed was doing 20-30+ extra queries on
+     * every single page load just to re-confirm schema state that hadn't
+     * changed since the last request. jura_modules.version already tracks
+     * the version each module was last ensured at, so this only re-runs a
+     * module's ensure_schema when its module.json version has moved past
+     * that (right after install, or an admin drops in an upgraded
+     * modules/{X}/ via the ZIP uploader) — exactly the same idea as
+     * ensure_cms_schema()'s own marker-file gate, using the version column
+     * instead of a file.
+     */
+    public static function ensureSchemaOnce(\PDO $pdo): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        try {
+            $installedVersions = $pdo->query('SELECT slug, version FROM ' . \jura_table('modules') . ' WHERE enabled=1')
+                ->fetchAll(\PDO::FETCH_KEY_PAIR);
+        } catch (\Throwable) {
+            $installedVersions = [];
+        }
+
+        $manifestVersions = [];
+        foreach (self::availableManifests() as $manifest) {
+            $manifestVersions[$manifest['slug']] = (string) ($manifest['version'] ?? '');
+        }
+
+        foreach (self::$registry as $slug => $config) {
+            if (empty($config['ensure_schema']) || !is_callable($config['ensure_schema'])) {
+                continue;
+            }
+            $manifestVersion = $manifestVersions[$slug] ?? '';
+            $installedVersion = $installedVersions[$slug] ?? null;
+            if ($installedVersion !== null && $manifestVersion !== '' && $manifestVersion === $installedVersion) {
+                continue;
+            }
+            ($config['ensure_schema'])($pdo);
+            if ($manifestVersion !== '') {
+                try {
+                    $pdo->prepare('UPDATE ' . \jura_table('modules') . ' SET version=? WHERE slug=?')->execute([$manifestVersion, $slug]);
+                } catch (\Throwable) {
+                    // jura_modules row may not exist yet on a first-ever
+                    // ensure_schema call before install() has inserted it;
+                    // the next request's version comparison just re-runs it.
+                }
+            }
+        }
+    }
+
     /** Call a hook on modules until one returns true. */
     public static function hookFirst(string $hook, mixed ...$args): bool
     {
@@ -141,6 +201,33 @@ final class ModuleLoader
                     $out .= $r;
                 }
             }
+        }
+        return $out;
+    }
+
+    /**
+     * Same as hookRender(), but prefixes each module's non-empty output
+     * with a heading using that module's own registered name — so e.g. the
+     * dashboard's Hotel stat cards read as belonging to "Hotel Module"
+     * rather than blending into the core stats above them with no visual
+     * boundary at all.
+     */
+    public static function hookRenderGrouped(string $hook, mixed ...$args): string
+    {
+        $out = '';
+        foreach (self::$registry as $config) {
+            if (empty($config[$hook]) || !is_callable($config[$hook])) {
+                continue;
+            }
+            $r = ($config[$hook])(...$args);
+            if (!is_string($r) || $r === '') {
+                continue;
+            }
+            $name = (string) ($config['name'] ?? '');
+            if ($name !== '') {
+                $out .= '<h2 style="font-size:.95rem;margin:2rem 0 1rem;padding-top:1.5rem;border-top:1px solid var(--jura-border);color:var(--jura-text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700">' . \e($name) . '</h2>';
+            }
+            $out .= $r;
         }
         return $out;
     }

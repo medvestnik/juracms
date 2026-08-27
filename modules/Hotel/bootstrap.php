@@ -16,6 +16,9 @@ ModuleLoader::register('hotel', [
     'dashboard_widgets'   => 'hotel_dashboard_widgets',
     'home_data'           => 'hotel_home_data',
     'filter_page_content' => 'hotel_filter_page_content',
+    'head_scripts'        => 'hotel_head_scripts',
+    'render_page_template' => 'hotel_render_page_template',
+    'page_templates'       => 'hotel_page_templates',
     'admin_nav_group'     => 'Hotel',
     'admin_nav'           => [
         '/admin/hotel/rooms'      => 'Номери',
@@ -24,5 +27,6 @@ ModuleLoader::register('hotel', [
         '/admin/hotel/galleries'  => 'Галереї',
         '/admin/hotel/leads'      => 'Заявки',
         '/admin/hotel/tax'        => 'Туристичний збір',
+        '/admin/hotel/booking'    => 'Exely / Бронювання',
     ],
 ]);

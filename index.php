@@ -465,7 +465,7 @@ if (str_starts_with($path, '/admin')) {
     ModuleLoader::ensureTable($pdo);
     ModuleLoader::autoMigrate($pdo);
     ModuleLoader::loadInstalled($pdo);
-    ModuleLoader::hookEach('ensure_schema', $pdo);
+    ModuleLoader::ensureSchemaOnce($pdo);
 
     if ($path === '/admin') {
         view_admin('dashboard', ['title' => 'Дашборд', 'stats' => admin_stats($pdo)]);
@@ -579,12 +579,45 @@ if (str_starts_with($path, '/admin')) {
     }
 
     if ($path === '/admin/pages' && $method === 'GET') {
-        $pages = $pdo->query('SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id ORDER BY p.sort_order,p.id")->fetchAll();
-        view_admin('pages', ['title' => 'Сторінки', 'pages' => $pages, 'edit' => null]);
+        $sortMap = ['date' => 'p.updated_at', 'title' => 'p.title', 'id' => 'p.id', 'order' => 'p.sort_order'];
+        $sort = array_key_exists($_GET['sort'] ?? '', $sortMap) ? $_GET['sort'] : 'order';
+        $dir = ($sort === 'order') ? 'ASC' : ((($_GET['dir'] ?? '') === 'asc') ? 'ASC' : 'DESC');
+        $perPageOpts = [20, 25, 30, 50, 100, 200];
+        $perPage = in_array((int) ($_GET['per_page'] ?? 20), $perPageOpts) ? (int) ($_GET['per_page'] ?? 20) : 20;
+        $total = (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table('pages'))->fetchColumn();
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        $curPage = max(1, min($totalPages, (int) ($_GET['page'] ?? 1)));
+        $offset = ($curPage - 1) * $perPage;
+        $orderCol = $sortMap[$sort];
+        $query = 'SELECT p.*,r.path route_path FROM ' . jura_table('pages') . ' p LEFT JOIN ' . jura_table('routes') . " r ON r.entity_type='page' AND r.entity_id=p.id ORDER BY {$orderCol} {$dir}, p.id DESC LIMIT {$perPage} OFFSET {$offset}";
+        view_admin('pages', [
+            'title' => 'Сторінки',
+            'pages' => $pdo->query($query)->fetchAll(),
+            'edit' => null,
+            'sort' => $sort,
+            'dir' => $dir,
+            'per_page' => $perPage,
+            'per_page_opts' => $perPageOpts,
+            'cur_page' => $curPage,
+            'total_pages' => $totalPages,
+            'total' => $total,
+            'template_options' => page_template_options(),
+        ]);
+        exit;
+    }
+    if ($path === '/admin/pages/reorder' && $method === 'POST') {
+        $ids = json_decode($_POST['ids'] ?? '[]', true);
+        if (is_array($ids)) {
+            foreach ($ids as $i => $id) {
+                $pdo->prepare('UPDATE ' . jura_table('pages') . ' SET sort_order=? WHERE id=?')->execute([$i + 1, (int) $id]);
+            }
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
         exit;
     }
     if ($path === '/admin/pages/create' && $method === 'GET') {
-        view_admin('pages', ['title' => 'Додати сторінку', 'edit' => []]);
+        view_admin('pages', ['title' => 'Додати сторінку', 'edit' => [], 'template_options' => page_template_options()]);
         exit;
     }
     if ($path === '/admin/pages' && $method === 'POST') {
@@ -612,6 +645,7 @@ if (str_starts_with($path, '/admin')) {
             'edit' => $editPage,
             'translations' => $editPage ? entity_translations($pdo, 'pages', $editPage) : [],
             'all_locales' => $localeRows,
+            'template_options' => page_template_options(),
         ]);
         exit;
     }
@@ -1271,7 +1305,7 @@ $pdo = admin_db();
 ensure_cms_schema($pdo);
 ModuleLoader::ensureTable($pdo);
 ModuleLoader::loadInstalled($pdo);
-ModuleLoader::hookEach('ensure_schema', $pdo);
+ModuleLoader::ensureSchemaOnce($pdo);
 
 if ($method === 'POST' && preg_match('#^/forms/([a-zA-Z0-9_-]+)$#', $path, $matches)) {
     $payload = $_POST;
@@ -1328,7 +1362,7 @@ if ($route) {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra)));
             } elseif (($page['template'] ?? '') === 'about') {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('about', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
-            } else {
+            } elseif (!ModuleLoader::hookFirst('render_page_template', $page, $settings, $locale, $common, $pdo)) {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             }
             exit;

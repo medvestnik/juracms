@@ -10,6 +10,15 @@ function hotel_ensure_schema(PDO $pdo): void
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_room_amenities') . " (room_id INT UNSIGNED NOT NULL,amenity_id INT UNSIGNED NOT NULL,PRIMARY KEY(room_id,amenity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_promotions') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,slug VARCHAR(191) UNIQUE,title VARCHAR(191),excerpt TEXT NULL,content MEDIUMTEXT NULL,status VARCHAR(20) DEFAULT 'draft',featured_image_id INT UNSIGNED NULL,meta_title VARCHAR(191) NULL,meta_description TEXT NULL,sort_order INT DEFAULT 0,published_at TIMESTAMP NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_room_rates') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,room_id INT UNSIGNED NOT NULL,tariff VARCHAR(191) NOT NULL,guests TINYINT UNSIGNED DEFAULT 1,price DECIMAL(12,2) DEFAULT 0,sort_order INT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // hotel_galleries must exist before the column-backfill loop below,
+    // since that loop ALTERs it (locale column) -- on a brand-new install
+    // (no tables yet at all) creating it after the loop instead meant the
+    // loop's SHOW COLUMNS FROM hotel_galleries threw an uncaught
+    // PDOException on every single request (this function doubles as the
+    // ensure_schema hook, which runs on every admin page), a permanent
+    // white-page crash the moment the module was first installed.
+    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_galleries') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,slug VARCHAR(191) UNIQUE,title VARCHAR(191),description TEXT NULL,status VARCHAR(20) DEFAULT 'active',meta_title VARCHAR(191) NULL,meta_description TEXT NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_gallery_images') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,gallery_id INT UNSIGNED,media_file_id INT UNSIGNED,alt VARCHAR(191) NULL,title VARCHAR(191) NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     // Add featured_image and show_similar_rooms columns if missing
     foreach ([
         ['hotel_rooms', 'featured_image', 'VARCHAR(255) NULL'],
@@ -27,8 +36,6 @@ function hotel_ensure_schema(PDO $pdo): void
             $pdo->exec("ALTER TABLE `{$tn}` ADD `{$col}` {$def}");
         }
     }
-    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_galleries') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,slug VARCHAR(191) UNIQUE,title VARCHAR(191),description TEXT NULL,status VARCHAR(20) DEFAULT 'active',meta_title VARCHAR(191) NULL,meta_description TEXT NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('hotel_gallery_images') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,gallery_id INT UNSIGNED,media_file_id INT UNSIGNED,alt VARCHAR(191) NULL,title VARCHAR(191) NULL,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     // Tourist tax default settings + page-content shortcode placeholders (see hotel_filter_page_content)
     foreach ([
         ['hotel_tourist_tax_ua_enabled',      '0',           'hotel'],
@@ -41,9 +48,35 @@ function hotel_ensure_schema(PDO $pdo): void
         ['hotel_tourist_tax_extra_note',      '',            'hotel'],
         ['booking_page_form',                 '',            'hotel'],
         ['booking_search_form',               '',            'hotel'],
+        ['booking_widget_head',               '',            'hotel'],
     ] as [$key, $val, $group]) {
         $pdo->prepare('INSERT IGNORE INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?)')
             ->execute([$key, $val, 'string', $group]);
+    }
+    hotel_seed_pages($pdo);
+}
+
+// Creates editable jura_pages/routes for /rooms and /booking (if missing) so
+// they show up in Сторінки/Меню like any other page, and can carry admin-
+// written intro content above the module's own listing/booking-form markup
+// -- see hotel_render_page_template() and the render_page_template hook.
+function hotel_seed_pages(PDO $pdo): void
+{
+    $authorId = (int) $pdo->query('SELECT id FROM ' . jura_table('users') . ' ORDER BY id LIMIT 1')->fetchColumn();
+    foreach ([
+        ['rooms', 'Номери', 'hotel_rooms', ''],
+        ['booking', 'Бронювання', 'hotel_booking', '{{ booking-page-form }}'],
+    ] as [$slug, $title, $template, $content]) {
+        $existing = $pdo->prepare('SELECT id FROM ' . jura_table('pages') . ' WHERE slug=? LIMIT 1');
+        $existing->execute([$slug]);
+        $pageId = (int) $existing->fetchColumn();
+        if (!$pageId) {
+            $ins = $pdo->prepare('INSERT INTO ' . jura_table('pages') . ' (author_id,title,slug,content,status,template,meta_title,sort_order,published_at) VALUES (?,?,?,?,?,?,?,?,NOW())');
+            $ins->execute([$authorId, $title, $slug, $content, 'published', $template, $title, 0]);
+            $pageId = (int) $pdo->lastInsertId();
+        }
+        $pdo->prepare('INSERT IGNORE INTO ' . jura_table('routes') . ' (path,entity_type,entity_id,status) VALUES (?,?,?,?)')
+            ->execute(['/' . $slug, 'page', $pageId, 'active']);
     }
 }
 
@@ -155,6 +188,16 @@ function hotel_filter_page_content(string $content, array $settings): string
         '{{ booking-page-form }}'   => $settings['booking_page_form']   ?? '',
         '{{ booking-search-form }}' => $settings['booking_search_form'] ?? '',
     ]);
+}
+
+// ── Hook: head_scripts ───────────────────────────────────────────────────────
+// Injects the Exely head_script snippet (head_script-uk from the Exely
+// booking-engine archive) into <head> on every frontend page, via
+// ModuleLoader::hookRender('head_scripts', $settings) — see
+// themes/frontend/default/layouts/app.php.
+function hotel_head_scripts(array $settings): string
+{
+    return (string) ($settings['booking_widget_head'] ?? '');
 }
 
 function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
@@ -455,6 +498,21 @@ function hotel_handle_admin(string $path, string $method, PDO $pdo): bool
         return true;
     }
 
+    if ($path === '/admin/hotel/booking') {
+        $bookingKeys = ['booking_widget_head', 'booking_search_form', 'booking_page_form'];
+        if ($method === 'POST') {
+            foreach ($bookingKeys as $key) {
+                $pdo->prepare('INSERT INTO ' . jura_table('settings') . ' (setting_key,setting_value,setting_type,group_name) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')
+                    ->execute([$key, (string) ($_POST[$key] ?? ''), 'string', 'hotel']);
+            }
+            session_flash('booking_success', 'Збережено');
+            redirect('/admin/hotel/booking');
+        }
+        $s = cms_settings($pdo);
+        view_admin('hotel/booking', ['title' => 'Exely / Бронювання', 's' => $s, 'success' => session_flash('booking_success')]);
+        return true;
+    }
+
     return false;
 }
 
@@ -465,12 +523,11 @@ function hotel_handle_frontend(string $path, PDO $pdo): bool
     // same way core page/post routing does, so /en/rooms works too.
     [$locale, $path] = current_locale($pdo, $path);
 
-    if ($path === '/rooms') {
-        $stmt = $pdo->prepare('SELECT r.*,fi.title as feat_img_file FROM ' . jura_table('hotel_rooms') . ' r LEFT JOIN ' . jura_table('hotel_room_images') . ' fi ON fi.room_id=r.id AND fi.is_featured=1' . " WHERE r.status='published' AND (r.locale=? OR r.locale='') ORDER BY r.sort_order,r.id");
-        $stmt->execute([$locale]);
-        view_frontend('hotel/rooms', ['title' => 'Номери', 'rooms' => $stmt->fetchAll(), 'settings' => cms_settings($pdo), 'locale' => $locale]);
-        return true;
-    }
+    // Note: /rooms itself is no longer hardcoded here -- it's a real,
+    // editable jura_pages row (template=hotel_rooms, seeded by
+    // hotel_seed_pages()) rendered via the render_page_template hook
+    // (see hotel_render_page_template() below), so it shows up in
+    // Сторінки/Меню like any other page.
     if (preg_match('#^/rooms/([^/]+)$#', $path, $matches)) {
         $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('hotel_rooms') . " WHERE slug=? AND status='published' AND (locale=? OR locale='') LIMIT 1");
         $stmt->execute([$matches[1], $locale]);
@@ -529,6 +586,40 @@ function hotel_handle_frontend(string $path, PDO $pdo): bool
         }
         unset($gal);
         view_frontend('hotel/gallery', ['title' => 'Галерея', 'galleries' => $galleries, 'settings' => cms_settings($pdo), 'locale' => $locale]);
+        return true;
+    }
+    return false;
+}
+
+// ── Hook: page_templates ─────────────────────────────────────────────────────
+// Lets the "Шаблон" dropdown on /admin/pages offer this module's templates,
+// so editing the auto-created Номери/Бронювання pages doesn't silently
+// reset their template back to the generic "page" on save -- see
+// ModuleLoader::hookCollect('page_templates') in index.php / pages.php.
+function hotel_page_templates(): array
+{
+    return [
+        'hotel_rooms'   => 'Готель: Номери',
+        'hotel_booking' => 'Готель: Бронювання',
+    ];
+}
+
+// ── Hook: render_page_template ──────────────────────────────────────────────
+// Renders a jura_pages row whose template is one of this module's own
+// (hotel_rooms, hotel_booking) via ModuleLoader::hookFirst('render_page_template', ...)
+// -- see index.php's page-render branch. Returning false means "not mine",
+// so core falls back to the generic 'page' view.
+function hotel_render_page_template(array $page, array $settings, string $locale, array $common, PDO $pdo): bool
+{
+    $template = $page['template'] ?? '';
+    if ($template === 'hotel_rooms') {
+        $stmt = $pdo->prepare('SELECT r.*,fi.title as feat_img_file FROM ' . jura_table('hotel_rooms') . ' r LEFT JOIN ' . jura_table('hotel_room_images') . ' fi ON fi.room_id=r.id AND fi.is_featured=1' . " WHERE r.status='published' AND (r.locale=? OR r.locale='') ORDER BY r.sort_order,r.id");
+        $stmt->execute([$locale]);
+        view_frontend('hotel/rooms', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'rooms' => $stmt->fetchAll(), 'settings' => $settings], $common));
+        return true;
+    }
+    if ($template === 'hotel_booking') {
+        view_frontend('hotel/booking', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common));
         return true;
     }
     return false;

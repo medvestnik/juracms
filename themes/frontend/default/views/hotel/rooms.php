@@ -1,4 +1,4 @@
-<?php $rooms = $rooms ?? []; ?>
+<?php $rooms = $rooms ?? []; $page = $page ?? null; ?>
 <style>
 /* Minimal, theme-independent styling so this module looks reasonable on
    any frontend theme out of the box. A theme can override these classes
@@ -8,7 +8,11 @@
 </style>
 <section class="section">
   <div class="site-container">
-    <h1 class="section-title">Номери</h1>
+    <h1 class="section-title"><?= e($page['title'] ?? 'Номери') ?></h1>
+
+    <?php if ($page && !empty($page['content'])): ?>
+    <div class="page-content" style="margin-bottom:2rem"><?= $page['content'] ?></div>
+    <?php endif; ?>
 
     <?php if (empty($rooms)): ?>
     <div class="empty-state">Номери ще не додані.</div>

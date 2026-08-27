@@ -33,7 +33,7 @@
   </div>
 </div>
 
-<?= \App\Core\ModuleLoader::hookRender('dashboard_widgets', $s) ?>
+<?= \App\Core\ModuleLoader::hookRenderGrouped('dashboard_widgets', $s) ?>
 
 <div class="jura-grid jura-grid-2">
   <section class="jura-card">
