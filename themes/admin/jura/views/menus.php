@@ -4,6 +4,7 @@ $items     = $items ?? [];
 $menuPages = $menu_pages ?? [];
 $menuHeader = $menu_header ?? 'main';
 $menuFooter = $menu_footer ?? 'main';
+$allLocales = $all_locales ?? [];
 
 // Quick-pick list for the "add item" form: every published page.
 $quickLinks = [];
@@ -117,6 +118,17 @@ foreach ($menuPages as $pg) {
           <option value="hidden">Прихований</option>
         </select>
       </div>
+      <?php if (!empty($allLocales)): ?>
+      <div>
+        <label class="jura-label">Мова</label>
+        <select class="jura-input" name="locale" style="margin:0">
+          <option value="">Всі мови</option>
+          <?php foreach ($allLocales as $l): ?>
+          <option value="<?= e($l['code']) ?>"><?= e($l['native_name']) ?> (<?= e($l['code']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <?php endif; ?>
       <div>
         <button class="jura-btn jura-btn-primary" type="submit">Додати</button>
       </div>
@@ -149,7 +161,7 @@ foreach ($menuPages as $pg) {
     <h3 style="margin:1.2rem 0 .5rem;font-size:15px;color:var(--jura-text-muted,#64748b)"><?= e($menuName) ?></h3>
     <table class="jura-table" style="margin-bottom:1rem">
       <thead>
-        <tr><th>Назва</th><th>URL</th><th>Сорт.</th><th>Дії</th></tr>
+        <tr><th>Назва</th><th>URL</th><th>Сорт.</th><?php if (!empty($allLocales)): ?><th>Мова</th><?php endif; ?><th>Дії</th></tr>
       </thead>
       <tbody>
       <?php foreach ($menuItems as $i): ?>
@@ -168,6 +180,16 @@ foreach ($menuPages as $pg) {
           <td>
             <input form="mi-<?= (int) $i['id'] ?>" class="jura-input" type="number" name="sort_order" value="<?= (int) $i['sort_order'] ?>" style="width:60px;margin:0">
           </td>
+          <?php if (!empty($allLocales)): ?>
+          <td>
+            <select form="mi-<?= (int) $i['id'] ?>" class="jura-input" name="locale" style="width:110px;margin:0">
+              <option value="" <?= empty($i['locale']) ? 'selected' : '' ?>>Всі мови</option>
+              <?php foreach ($allLocales as $l): ?>
+              <option value="<?= e($l['code']) ?>" <?= ($i['locale'] ?? '') === $l['code'] ? 'selected' : '' ?>><?= e($l['native_name']) ?> (<?= e($l['code']) ?>)</option>
+              <?php endforeach; ?>
+            </select>
+          </td>
+          <?php endif; ?>
           <td style="white-space:nowrap;display:flex;gap:.35rem;align-items:center">
             <button form="mi-<?= (int) $i['id'] ?>" class="jura-btn jura-btn-secondary" type="submit" style="padding:.3rem .6rem">✓</button>
             <form method="post" style="display:inline;margin:0">

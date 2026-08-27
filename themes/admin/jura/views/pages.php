@@ -172,7 +172,7 @@ endif; ?>
         <th>Статус</th>
         <th>Шаблон</th>
         <th>Оновлено</th>
-        <th>Дії</th>
+        <th style="text-align:center">Дії</th>
       </tr>
     </thead>
     <tbody id="pages-tbody">
@@ -191,7 +191,7 @@ endif; ?>
         </td>
         <td><?= e($p['template'] ?? 'page') ?></td>
         <td style="font-size:.82rem;color:#64748b"><?= e($p['updated_at'] ?? '') ?></td>
-        <td style="white-space:nowrap;display:flex;gap:.4rem;align-items:center">
+        <td style="white-space:nowrap;display:flex;gap:.4rem;align-items:center;justify-content:flex-end">
           <a class="jura-btn jura-btn-secondary" style="padding:.3rem .6rem;font-size:.8rem" href="/admin/pages/<?= (int) $p['id'] ?>/edit">Редагувати</a>
           <?php if (!empty($p['route_path'])): ?>
           <a class="jura-btn jura-btn-secondary" style="padding:.3rem .6rem;font-size:.8rem" href="<?= e($p['route_path']) ?>" target="_blank" rel="noopener">👁</a>
