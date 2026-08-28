@@ -205,6 +205,19 @@ function git_deploy_pull(PDO $pdo): array
     $hasConflict = str_contains($output, 'CONFLICT') || str_contains($output, 'Automatic merge failed');
     $success = !$hasConflict && !str_contains($output, 'error') && !str_contains($output, 'fatal');
 
+    // A conflicted merge leaves conflict markers (<<<<<<< HEAD / ======= /
+    // >>>>>>>) written directly into whatever files collided -- if one of
+    // those happens to be a module's bootstrap.php (or any file the CMS
+    // require()s), the site breaks on the very next request with a fatal
+    // parse error, on top of the pull already having failed. Reporting the
+    // conflict is not enough; restore the pre-pull state immediately so the
+    // live site keeps running on the last-known-good commit while the
+    // conflict gets resolved manually (via SSH, as the error below says).
+    if ($hasConflict) {
+        $abortOutput = trim(safe_shell_exec($git . ' merge --abort 2>&1'));
+        $output .= "\n\n=== git merge --abort (автоматично, щоб не лишати сайт з конфліктами у файлах) ===\n" . ($abortOutput !== '' ? $abortOutput : 'виконано');
+    }
+
     $changedFiles = '';
     if ($success) {
         $headAfter = trim(safe_shell_exec($git . ' rev-parse HEAD 2>&1'));
