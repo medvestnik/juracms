@@ -2,8 +2,9 @@
 global $pdo;
 $settings = $settings ?? (isset($pdo) ? cms_settings($pdo) : []);
 $siteName = $settings['site_name'] ?? 'Jura CMS';
-$headerItems = isset($pdo) ? frontend_menu_items($pdo, $settings['menu_header'] ?? 'main') : [];
-$footerItems = isset($pdo) ? frontend_menu_items($pdo, $settings['menu_footer'] ?? 'main') : [];
+$currentLocaleCode = $locale ?? ($settings['default_locale'] ?? 'uk');
+$headerItems = isset($pdo) ? frontend_menu_items($pdo, $settings['menu_header'] ?? 'main', $currentLocaleCode) : [];
+$footerItems = isset($pdo) ? frontend_menu_items($pdo, $settings['menu_footer'] ?? 'main', $currentLocaleCode) : [];
 $current = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $metaDescription = $meta_description ?? '';
 
@@ -12,7 +13,6 @@ $metaDescription = $meta_description ?? '';
 // the actual translated page/post), falling back to that locale's home
 // page for views that don't carry $translations (e.g. 404, module pages).
 $siteLocales = [];
-$currentLocaleCode = $locale ?? ($settings['default_locale'] ?? 'uk');
 if (isset($pdo)) {
     try {
         $localeRows = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' WHERE is_active=1 ORDER BY sort_order,id')->fetchAll();

@@ -33,9 +33,7 @@
   </div>
 </div>
 
-<?= \App\Core\ModuleLoader::hookRenderGrouped('dashboard_widgets', $s) ?>
-
-<div class="jura-grid jura-grid-2">
+<div class="jura-grid jura-grid-2" style="margin-bottom:1.5rem">
   <section class="jura-card">
     <h2 class="jura-card-title" style="margin-bottom:1rem">Швидкі дії</h2>
     <div style="display:flex;flex-wrap:wrap;gap:.6rem">
@@ -56,3 +54,5 @@
     </div>
   </section>
 </div>
+
+<?= \App\Core\ModuleLoader::hookRenderGrouped('dashboard_widgets', $s) ?>

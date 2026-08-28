@@ -66,7 +66,7 @@ $pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
         <th>Категорія</th>
         <th>Статус</th>
         <th>Опубліковано</th>
-        <th>Дії</th>
+        <th style="text-align:center">Дії</th>
       </tr>
     </thead>
     <tbody id="posts-tbody">
@@ -87,7 +87,7 @@ $pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
           </form>
         </td>
         <td style="font-size:.82rem;color:#64748b"><?= e(substr($p['published_at'] ?? '—', 0, 10)) ?></td>
-        <td style="white-space:nowrap;display:flex;gap:.35rem;align-items:center">
+        <td style="white-space:nowrap;display:flex;gap:.35rem;align-items:center;justify-content:flex-end">
           <a class="jura-btn jura-btn-secondary" href="/admin/posts/<?= (int)$p['id'] ?>/edit" style="padding:.3rem .65rem">Редагувати</a>
           <form method="post" action="/admin/posts/<?= (int)$p['id'] ?>/delete" style="display:inline;margin:0">
             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">

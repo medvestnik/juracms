@@ -52,7 +52,7 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
-const CMS_SCHEMA_VERSION = '4';
+const CMS_SCHEMA_VERSION = '5';
 
 function ensure_cms_schema(PDO $pdo): void
 {
@@ -113,6 +113,10 @@ function ensure_cms_schema(PDO $pdo): void
         ['pages', 'translation_of', 'INT UNSIGNED NULL'],
         ['posts', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
         ['posts', 'translation_of', 'INT UNSIGNED NULL'],
+        // Empty locale = shown for every locale (matches pages/posts/hotel
+        // tables' fallback), so existing menu items keep showing up on every
+        // language without an admin having to tag them.
+        ['menu_items', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
     ] as [$table, $column, $definition]) {
         $tableName = str_replace('`', '', jura_table($table));
         $stmt = $pdo->query("SHOW COLUMNS FROM `{$tableName}` LIKE " . $pdo->quote($column));
@@ -349,11 +353,11 @@ function save_route(PDO $pdo, string $path, string $entityType, int $entityId): 
         ->execute([$path, $entityType, $entityId]);
 }
 
-function frontend_menu_items(PDO $pdo, string $code): array
+function frontend_menu_items(PDO $pdo, string $code, string $locale = ''): array
 {
     try {
-        $stmt = $pdo->prepare('SELECT i.* FROM ' . jura_table('menu_items') . ' i JOIN ' . jura_table('menus') . " m ON m.id=i.menu_id WHERE m.code=? AND i.status='active' ORDER BY i.sort_order,i.id");
-        $stmt->execute([$code]);
+        $stmt = $pdo->prepare('SELECT i.* FROM ' . jura_table('menu_items') . ' i JOIN ' . jura_table('menus') . " m ON m.id=i.menu_id WHERE m.code=? AND i.status='active' AND (i.locale=? OR i.locale='') ORDER BY i.sort_order,i.id");
+        $stmt->execute([$code, $locale]);
         return $stmt->fetchAll();
     } catch (\Throwable) {
         return [];
@@ -718,7 +722,7 @@ if (str_starts_with($path, '/admin')) {
                 $pdo->prepare('INSERT INTO ' . jura_table('menus') . ' (code,name) VALUES (?,?) ON DUPLICATE KEY UPDATE name=VALUES(name)')->execute([slugify((string) $_POST['code']), $_POST['name']]);
             }
             if (($_POST['action'] ?? '') === 'add_item') {
-                $pdo->prepare('INSERT INTO ' . jura_table('menu_items') . ' (menu_id,parent_id,title,url,target,sort_order,status) VALUES (?,?,?,?,?,?,?)')->execute([(int) $_POST['menu_id'], ($_POST['parent_id'] ?? '') !== '' ? (int) $_POST['parent_id'] : null, $_POST['title'], $_POST['url'], $_POST['target'] ?? '_self', (int) ($_POST['sort_order'] ?? 0), $_POST['status'] ?? 'active']);
+                $pdo->prepare('INSERT INTO ' . jura_table('menu_items') . ' (menu_id,parent_id,title,url,target,sort_order,status,locale) VALUES (?,?,?,?,?,?,?,?)')->execute([(int) $_POST['menu_id'], ($_POST['parent_id'] ?? '') !== '' ? (int) $_POST['parent_id'] : null, $_POST['title'], $_POST['url'], $_POST['target'] ?? '_self', (int) ($_POST['sort_order'] ?? 0), $_POST['status'] ?? 'active', $_POST['locale'] ?? '']);
             }
             if (($_POST['action'] ?? '') === 'delete_item') {
                 $pdo->prepare('DELETE FROM ' . jura_table('menu_items') . ' WHERE id=?')->execute([(int) $_POST['id']]);
@@ -732,14 +736,14 @@ if (str_starts_with($path, '/admin')) {
                 $pdo->prepare('UPDATE ' . jura_table('menus') . ' SET name=? WHERE id=?')->execute([$_POST['name'], (int) $_POST['id']]);
             }
             if (($_POST['action'] ?? '') === 'edit_item') {
-                $pdo->prepare('UPDATE ' . jura_table('menu_items') . ' SET title=?,url=?,sort_order=? WHERE id=?')
-                    ->execute([$_POST['title'], $_POST['url'], (int)($_POST['sort_order'] ?? 0), (int)$_POST['id']]);
+                $pdo->prepare('UPDATE ' . jura_table('menu_items') . ' SET title=?,url=?,sort_order=?,locale=? WHERE id=?')
+                    ->execute([$_POST['title'], $_POST['url'], (int)($_POST['sort_order'] ?? 0), $_POST['locale'] ?? '', (int)$_POST['id']]);
             }
             redirect('/admin/menus');
         }
         $menuPages = $pdo->query('SELECT id,title,slug,template FROM ' . jura_table('pages') . " WHERE status='published' ORDER BY title")->fetchAll();
         $s = cms_settings($pdo);
-        view_admin('menus', ['title' => 'Меню', 'menus' => $pdo->query('SELECT * FROM ' . jura_table('menus') . ' ORDER BY name')->fetchAll(), 'items' => $pdo->query('SELECT i.*,m.name menu_name,m.code menu_code FROM ' . jura_table('menu_items') . ' i JOIN ' . jura_table('menus') . ' m ON m.id=i.menu_id ORDER BY m.name,i.sort_order,i.id')->fetchAll(), 'menu_pages' => $menuPages, 'menu_header' => $s['menu_header'] ?? 'main', 'menu_footer' => $s['menu_footer'] ?? 'main']);
+        view_admin('menus', ['title' => 'Меню', 'menus' => $pdo->query('SELECT * FROM ' . jura_table('menus') . ' ORDER BY name')->fetchAll(), 'items' => $pdo->query('SELECT i.*,m.name menu_name,m.code menu_code FROM ' . jura_table('menu_items') . ' i JOIN ' . jura_table('menus') . ' m ON m.id=i.menu_id ORDER BY m.name,i.sort_order,i.id')->fetchAll(), 'menu_pages' => $menuPages, 'menu_header' => $s['menu_header'] ?? 'main', 'menu_footer' => $s['menu_footer'] ?? 'main', 'all_locales' => jura_available_locales($pdo)]);
         exit;
     }
 
