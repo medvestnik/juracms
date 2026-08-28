@@ -29,6 +29,11 @@ function portfolio_module_ensure_schema(PDO $pdo): void
     if (!$pdo->query("SHOW COLUMNS FROM {$table} LIKE 'locale'")->fetch()) {
         $pdo->exec("ALTER TABLE {$table} ADD locale VARCHAR(16) NOT NULL DEFAULT '' AFTER featured_home");
     }
+    // Real project/work screenshot, same upload-after-save flow as
+    // Posts' featured_image -- see the /upload-image route in bootstrap.php.
+    if (!$pdo->query("SHOW COLUMNS FROM {$table} LIKE 'featured_image'")->fetch()) {
+        $pdo->exec("ALTER TABLE {$table} ADD featured_image VARCHAR(255) NULL AFTER locale");
+    }
 }
 
 function portfolio_module_insert_missing_rows(PDO $pdo): void

@@ -109,6 +109,7 @@ ModuleLoader::register('portfolio', [
             status ENUM('published','draft') NOT NULL DEFAULT 'published',
             featured_home TINYINT(1) NOT NULL DEFAULT 0,
             locale VARCHAR(16) NOT NULL DEFAULT '',
+            featured_image VARCHAR(255) NULL,
             sort_order INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -124,24 +125,52 @@ ModuleLoader::register('portfolio', [
         $pdo->prepare('UPDATE ' . jura_table('menu_items') . " SET url='/projects' WHERE title='Проекты' AND url<>'/projects'")->execute();
     },
     'handle_admin' => static function (string $path, string $method, PDO $pdo) use ($render): bool {
-        if (!preg_match('#^/admin/portfolio/(projects|items)(?:/(create|\\d+/edit))?$#', $path, $m)) return false;
+        if (!preg_match('#^/admin/portfolio/(projects|items)(?:/(create|\\d+/edit|\\d+/upload-image))?$#', $path, $m)) return false;
         $kind = $m[1] === 'projects' ? 'project' : 'portfolio';
         $segment = $m[2] ?? '';
         $base = '/admin/portfolio/' . $m[1];
+        if ($method === 'POST' && str_ends_with($segment, '/upload-image')) {
+            $id = (int) $segment;
+            $uploadDir = BASE_PATH . '/public/userfiles/portfolio/';
+            if (!is_dir($uploadDir)) { mkdir($uploadDir, 0755, true); }
+            $file = $_FILES['featured_image'] ?? null;
+            if ($file && $file['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                    $filename = 'portfolio-' . $id . '-' . time() . '.' . $ext;
+                    if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
+                        $old = $pdo->prepare('SELECT featured_image FROM ' . jura_table('portfolio_items') . ' WHERE id=?');
+                        $old->execute([$id]);
+                        $oldImg = $old->fetchColumn();
+                        if ($oldImg && str_starts_with((string) $oldImg, 'portfolio-') && file_exists($uploadDir . $oldImg)) {
+                            @unlink($uploadDir . $oldImg);
+                        }
+                        $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET featured_image=? WHERE id=?')->execute([$filename, $id]);
+                    }
+                }
+            } elseif (!empty($_POST['remove_image'])) {
+                $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET featured_image=NULL WHERE id=?')->execute([$id]);
+            }
+            redirect($base . '/' . $id . '/edit');
+        }
         if ($method === 'POST') {
             if (($_POST['action'] ?? '') === 'delete') {
                 $pdo->prepare('DELETE FROM ' . jura_table('portfolio_items') . ' WHERE id=? AND kind=?')->execute([(int) $_POST['id'], $kind]);
-            } else {
-                $values = [$kind, trim((string)$_POST['title']), trim((string)$_POST['category']), trim((string)$_POST['description']), trim((string)$_POST['url']), trim((string)$_POST['link_label']), trim((string)($_POST['status_label'] ?? '')), preg_replace('/[^a-z-]/', '', (string)$_POST['color']), isset($_POST['published']) ? 'published' : 'draft', isset($_POST['featured_home']) ? 1 : 0, (string)($_POST['locale'] ?? ''), (int)($_POST['sort_order'] ?? 0)];
-                $id = (int) ($_POST['id'] ?? 0);
-                if ($id) {
-                    $values[] = $id;
-                    $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET kind=?,title=?,category=?,description=?,url=?,link_label=?,status_label=?,color=?,status=?,featured_home=?,locale=?,sort_order=? WHERE id=?')->execute($values);
-                } else {
-                    $pdo->prepare('INSERT INTO ' . jura_table('portfolio_items') . ' (kind,title,category,description,url,link_label,status_label,color,status,featured_home,locale,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute($values);
-                }
+                redirect($base);
             }
-            redirect($base);
+            $values = [$kind, trim((string)$_POST['title']), trim((string)$_POST['category']), trim((string)$_POST['description']), trim((string)$_POST['url']), trim((string)$_POST['link_label']), trim((string)($_POST['status_label'] ?? '')), preg_replace('/[^a-z-]/', '', (string)$_POST['color']), isset($_POST['published']) ? 'published' : 'draft', isset($_POST['featured_home']) ? 1 : 0, (string)($_POST['locale'] ?? ''), (int)($_POST['sort_order'] ?? 0)];
+            $id = (int) ($_POST['id'] ?? 0);
+            if ($id) {
+                $values[] = $id;
+                $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET kind=?,title=?,category=?,description=?,url=?,link_label=?,status_label=?,color=?,status=?,featured_home=?,locale=?,sort_order=? WHERE id=?')->execute($values);
+            } else {
+                $pdo->prepare('INSERT INTO ' . jura_table('portfolio_items') . ' (kind,title,category,description,url,link_label,status_label,color,status,featured_home,locale,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute($values);
+                $id = (int) $pdo->lastInsertId();
+            }
+            // Save-and-stay by default (like Pages/Posts) so the featured-
+            // image upload section -- only shown once the item has an id --
+            // becomes available right away without a second save.
+            redirect(isset($_POST['_close']) ? $base : $base . '/' . $id . '/edit');
         }
         if ($segment === 'create' || str_ends_with($segment, '/edit')) {
             $item = [];
