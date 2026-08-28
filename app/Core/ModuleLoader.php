@@ -60,8 +60,19 @@ final class ModuleLoader
         }
         foreach ($slugs as $slug) {
             $bootstrap = self::modulePath($slug) . '/bootstrap.php';
-            if (is_file($bootstrap)) {
+            if (!is_file($bootstrap)) {
+                continue;
+            }
+            // One module's bootstrap.php throwing (a PHP ParseError from
+            // leftover git-conflict markers, a fatal in module code after a
+            // botched manual edit, etc.) must not take the entire admin --
+            // and every OTHER module -- down with it. require_once of a file
+            // with a parse error raises a catchable \ParseError since PHP 7,
+            // so isolate it per module and keep loading the rest.
+            try {
                 require_once $bootstrap;
+            } catch (\Throwable $e) {
+                error_log("ModuleLoader: не вдалося завантажити модуль '{$slug}' ({$bootstrap}): " . $e->getMessage());
             }
         }
     }
