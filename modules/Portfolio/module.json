@@ -1,7 +1,7 @@
 {
   "slug": "portfolio",
   "name": "Портфоліо",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "detect_table": "portfolio_items",
   "description": "Керування проєктами і роботами портфоліо."
 }

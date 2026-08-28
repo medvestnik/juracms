@@ -31,6 +31,7 @@ $render = static function (string $area, string $view, array $data): void {
 };
 
 ModuleLoader::register('portfolio', [
+    'name' => 'Портфоліо',
     'admin_nav_group' => 'Портфоліо',
     'admin_nav' => [
         '/admin/portfolio/projects' => 'Проєкти',
@@ -38,6 +39,61 @@ ModuleLoader::register('portfolio', [
         '/admin/portfolio/items' => 'Портфоліо',
         '/admin/portfolio/items/create' => 'Додати портфоліо',
     ],
+    // ── Hook: admin_stats ────────────────────────────────────────────────
+    // Contributes project/portfolio counters to the dashboard stat row via
+    // ModuleLoader::hookCollect('admin_stats', $pdo) -- see index.php
+    // admin_stats().
+    'admin_stats' => static function (PDO $pdo): array {
+        $stats = [];
+        foreach (['project' => 'portfolio_projects_count', 'portfolio' => 'portfolio_items_count'] as $kind => $key) {
+            try {
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('portfolio_items') . ' WHERE kind=?');
+                $stmt->execute([$kind]);
+                $stats[$key] = (int) $stmt->fetchColumn();
+            } catch (Throwable) {
+                $stats[$key] = 0;
+            }
+        }
+        return $stats;
+    },
+    // ── Hook: dashboard_widgets ──────────────────────────────────────────
+    // Renders a Portfolio stat-card row + quick actions into the admin
+    // dashboard via ModuleLoader::hookRenderGrouped('dashboard_widgets', $s)
+    // -- see themes/admin/jura/views/dashboard.php.
+    'dashboard_widgets' => static function (array $stats): string {
+        $projects = (int) ($stats['portfolio_projects_count'] ?? 0);
+        $items = (int) ($stats['portfolio_items_count'] ?? 0);
+        ob_start();
+        ?>
+        <div class="jura-grid jura-grid-4" style="margin-bottom:1.5rem">
+          <a href="/admin/portfolio/projects" class="jura-card jura-card-hover" style="text-decoration:none;display:block">
+            <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--jura-text-muted)">Проєкти</div>
+            <span class="jura-stat-value"><?= $projects ?></span>
+          </a>
+          <a href="/admin/portfolio/items" class="jura-card jura-card-hover" style="text-decoration:none;display:block">
+            <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--jura-text-muted)">Портфоліо</div>
+            <span class="jura-stat-value"><?= $items ?></span>
+          </a>
+        </div>
+        <div class="jura-grid jura-grid-2" style="margin-bottom:1.5rem">
+          <section class="jura-card">
+            <h2 class="jura-card-title" style="margin-bottom:1rem">Портфоліо — швидкі дії</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:.6rem">
+              <a href="/admin/portfolio/projects/create" class="jura-btn jura-btn-primary">+ Новий проєкт</a>
+              <a href="/admin/portfolio/items/create" class="jura-btn jura-btn-secondary">+ Нова робота портфоліо</a>
+            </div>
+          </section>
+          <section class="jura-card">
+            <h2 class="jura-card-title" style="margin-bottom:1rem">Сторінки сайту</h2>
+            <div style="display:grid;gap:.6rem">
+              <a href="/projects" target="_blank" rel="noopener" style="font-size:.875rem">↗ Проєкти</a>
+              <a href="/portfolio" target="_blank" rel="noopener" style="font-size:.875rem">↗ Портфоліо</a>
+            </div>
+          </section>
+        </div>
+        <?php
+        return (string) ob_get_clean();
+    },
     'install' => static function (PDO $pdo): void {
         $table = jura_table('portfolio_items');
         $pdo->exec("CREATE TABLE IF NOT EXISTS {$table} (
