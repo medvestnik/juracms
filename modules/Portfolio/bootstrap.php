@@ -31,6 +31,7 @@ $render = static function (string $area, string $view, array $data): void {
 };
 
 ModuleLoader::register('portfolio', [
+    'name' => 'Портфоліо',
     'admin_nav_group' => 'Портфоліо',
     'admin_nav' => [
         '/admin/portfolio/projects' => 'Проєкти',
@@ -38,6 +39,61 @@ ModuleLoader::register('portfolio', [
         '/admin/portfolio/items' => 'Портфоліо',
         '/admin/portfolio/items/create' => 'Додати портфоліо',
     ],
+    // ── Hook: admin_stats ────────────────────────────────────────────────
+    // Contributes project/portfolio counters to the dashboard stat row via
+    // ModuleLoader::hookCollect('admin_stats', $pdo) -- see index.php
+    // admin_stats().
+    'admin_stats' => static function (PDO $pdo): array {
+        $stats = [];
+        foreach (['project' => 'portfolio_projects_count', 'portfolio' => 'portfolio_items_count'] as $kind => $key) {
+            try {
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('portfolio_items') . ' WHERE kind=?');
+                $stmt->execute([$kind]);
+                $stats[$key] = (int) $stmt->fetchColumn();
+            } catch (Throwable) {
+                $stats[$key] = 0;
+            }
+        }
+        return $stats;
+    },
+    // ── Hook: dashboard_widgets ──────────────────────────────────────────
+    // Renders a Portfolio stat-card row + quick actions into the admin
+    // dashboard via ModuleLoader::hookRenderGrouped('dashboard_widgets', $s)
+    // -- see themes/admin/jura/views/dashboard.php.
+    'dashboard_widgets' => static function (array $stats): string {
+        $projects = (int) ($stats['portfolio_projects_count'] ?? 0);
+        $items = (int) ($stats['portfolio_items_count'] ?? 0);
+        ob_start();
+        ?>
+        <div class="jura-grid jura-grid-4" style="margin-bottom:1.5rem">
+          <a href="/admin/portfolio/projects" class="jura-card jura-card-hover" style="text-decoration:none;display:block">
+            <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--jura-text-muted)">Проєкти</div>
+            <span class="jura-stat-value"><?= $projects ?></span>
+          </a>
+          <a href="/admin/portfolio/items" class="jura-card jura-card-hover" style="text-decoration:none;display:block">
+            <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--jura-text-muted)">Портфоліо</div>
+            <span class="jura-stat-value"><?= $items ?></span>
+          </a>
+        </div>
+        <div class="jura-grid jura-grid-2" style="margin-bottom:1.5rem">
+          <section class="jura-card">
+            <h2 class="jura-card-title" style="margin-bottom:1rem">Портфоліо — швидкі дії</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:.6rem">
+              <a href="/admin/portfolio/projects/create" class="jura-btn jura-btn-primary">+ Новий проєкт</a>
+              <a href="/admin/portfolio/items/create" class="jura-btn jura-btn-secondary">+ Нова робота портфоліо</a>
+            </div>
+          </section>
+          <section class="jura-card">
+            <h2 class="jura-card-title" style="margin-bottom:1rem">Сторінки сайту</h2>
+            <div style="display:grid;gap:.6rem">
+              <a href="/projects" target="_blank" rel="noopener" style="font-size:.875rem">↗ Проєкти</a>
+              <a href="/portfolio" target="_blank" rel="noopener" style="font-size:.875rem">↗ Портфоліо</a>
+            </div>
+          </section>
+        </div>
+        <?php
+        return (string) ob_get_clean();
+    },
     'install' => static function (PDO $pdo): void {
         $table = jura_table('portfolio_items');
         $pdo->exec("CREATE TABLE IF NOT EXISTS {$table} (
@@ -53,6 +109,7 @@ ModuleLoader::register('portfolio', [
             status ENUM('published','draft') NOT NULL DEFAULT 'published',
             featured_home TINYINT(1) NOT NULL DEFAULT 0,
             locale VARCHAR(16) NOT NULL DEFAULT '',
+            featured_image VARCHAR(255) NULL,
             sort_order INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -68,24 +125,52 @@ ModuleLoader::register('portfolio', [
         $pdo->prepare('UPDATE ' . jura_table('menu_items') . " SET url='/projects' WHERE title='Проекты' AND url<>'/projects'")->execute();
     },
     'handle_admin' => static function (string $path, string $method, PDO $pdo) use ($render): bool {
-        if (!preg_match('#^/admin/portfolio/(projects|items)(?:/(create|\\d+/edit))?$#', $path, $m)) return false;
+        if (!preg_match('#^/admin/portfolio/(projects|items)(?:/(create|\\d+/edit|\\d+/upload-image))?$#', $path, $m)) return false;
         $kind = $m[1] === 'projects' ? 'project' : 'portfolio';
         $segment = $m[2] ?? '';
         $base = '/admin/portfolio/' . $m[1];
+        if ($method === 'POST' && str_ends_with($segment, '/upload-image')) {
+            $id = (int) $segment;
+            $uploadDir = BASE_PATH . '/public/userfiles/portfolio/';
+            if (!is_dir($uploadDir)) { mkdir($uploadDir, 0755, true); }
+            $file = $_FILES['featured_image'] ?? null;
+            if ($file && $file['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                    $filename = 'portfolio-' . $id . '-' . time() . '.' . $ext;
+                    if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
+                        $old = $pdo->prepare('SELECT featured_image FROM ' . jura_table('portfolio_items') . ' WHERE id=?');
+                        $old->execute([$id]);
+                        $oldImg = $old->fetchColumn();
+                        if ($oldImg && str_starts_with((string) $oldImg, 'portfolio-') && file_exists($uploadDir . $oldImg)) {
+                            @unlink($uploadDir . $oldImg);
+                        }
+                        $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET featured_image=? WHERE id=?')->execute([$filename, $id]);
+                    }
+                }
+            } elseif (!empty($_POST['remove_image'])) {
+                $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET featured_image=NULL WHERE id=?')->execute([$id]);
+            }
+            redirect($base . '/' . $id . '/edit');
+        }
         if ($method === 'POST') {
             if (($_POST['action'] ?? '') === 'delete') {
                 $pdo->prepare('DELETE FROM ' . jura_table('portfolio_items') . ' WHERE id=? AND kind=?')->execute([(int) $_POST['id'], $kind]);
-            } else {
-                $values = [$kind, trim((string)$_POST['title']), trim((string)$_POST['category']), trim((string)$_POST['description']), trim((string)$_POST['url']), trim((string)$_POST['link_label']), trim((string)($_POST['status_label'] ?? '')), preg_replace('/[^a-z-]/', '', (string)$_POST['color']), isset($_POST['published']) ? 'published' : 'draft', isset($_POST['featured_home']) ? 1 : 0, (string)($_POST['locale'] ?? ''), (int)($_POST['sort_order'] ?? 0)];
-                $id = (int) ($_POST['id'] ?? 0);
-                if ($id) {
-                    $values[] = $id;
-                    $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET kind=?,title=?,category=?,description=?,url=?,link_label=?,status_label=?,color=?,status=?,featured_home=?,locale=?,sort_order=? WHERE id=?')->execute($values);
-                } else {
-                    $pdo->prepare('INSERT INTO ' . jura_table('portfolio_items') . ' (kind,title,category,description,url,link_label,status_label,color,status,featured_home,locale,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute($values);
-                }
+                redirect($base);
             }
-            redirect($base);
+            $values = [$kind, trim((string)$_POST['title']), trim((string)$_POST['category']), trim((string)$_POST['description']), trim((string)$_POST['url']), trim((string)$_POST['link_label']), trim((string)($_POST['status_label'] ?? '')), preg_replace('/[^a-z-]/', '', (string)$_POST['color']), isset($_POST['published']) ? 'published' : 'draft', isset($_POST['featured_home']) ? 1 : 0, (string)($_POST['locale'] ?? ''), (int)($_POST['sort_order'] ?? 0)];
+            $id = (int) ($_POST['id'] ?? 0);
+            if ($id) {
+                $values[] = $id;
+                $pdo->prepare('UPDATE ' . jura_table('portfolio_items') . ' SET kind=?,title=?,category=?,description=?,url=?,link_label=?,status_label=?,color=?,status=?,featured_home=?,locale=?,sort_order=? WHERE id=?')->execute($values);
+            } else {
+                $pdo->prepare('INSERT INTO ' . jura_table('portfolio_items') . ' (kind,title,category,description,url,link_label,status_label,color,status,featured_home,locale,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute($values);
+                $id = (int) $pdo->lastInsertId();
+            }
+            // Save-and-stay by default (like Pages/Posts) so the featured-
+            // image upload section -- only shown once the item has an id --
+            // becomes available right away without a second save.
+            redirect(isset($_POST['_close']) ? $base : $base . '/' . $id . '/edit');
         }
         if ($segment === 'create' || str_ends_with($segment, '/edit')) {
             $item = [];

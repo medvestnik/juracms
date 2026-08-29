@@ -1,7 +1,7 @@
 <?php use App\Core\View; ?>
 <section class="jura-card jura-auth-card" style="padding:2rem">
     <div style="text-align:center;margin-bottom:1.5rem">
-        <img src="/install/assets/jura-cms-j-logo.png" alt="Jura CMS" style="width:56px;height:56px;object-fit:contain;margin-bottom:.75rem">
+        <img src="/install/assets/jura-cms-j-logo.png" alt="Jura CMS" style="width:56px;height:56px;object-fit:contain;margin:0 auto .75rem">
         <h1 style="margin:0;font-size:1.4rem">Вхід в панель JuraCMS</h1>
     </div>
     <?php if (!empty($error)): ?>
