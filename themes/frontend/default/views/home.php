@@ -2,6 +2,20 @@
 global $pdo;
 $page = $page ?? [];
 $settings = $settings ?? [];
+$blocks = $blocks ?? [];
+
+// A page built from the block constructor (see App\Core\BlockRegistry and
+// the "Блоки сторінки" editor on /admin/pages) fully owns its own markup --
+// render exactly what's configured and stop. A home page with zero blocks
+// (not migrated yet, or a fresh install) falls through to the classic
+// hardcoded layout below so nothing goes blank.
+if (!empty($blocks)) {
+    foreach ($blocks as $block) {
+        echo \App\Core\BlockRegistry::render((string) $block['block_type'], $block['settings'], $pdo);
+    }
+    return;
+}
+
 $latestPosts = [];
 if (isset($pdo)) {
     try {

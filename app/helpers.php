@@ -108,7 +108,8 @@ if (!function_exists('page_template_options')) {
     function page_template_options(): array
     {
         $core = [
-            'page'     => 'Сторінка',
+            'page'     => 'Сторінка (заголовок + текст)',
+            'blocks'   => 'Конструктор блоків',
             'home'     => 'Головна',
             'blog'     => 'Блог',
             'contacts' => 'Контакти',
@@ -116,6 +117,26 @@ if (!function_exists('page_template_options')) {
         ];
 
         return $core + \App\Core\ModuleLoader::hookCollect('page_templates');
+    }
+}
+
+if (!function_exists('page_blocks')) {
+    /** Active blocks for a page, in display order, with settings_json decoded
+     * -- see App\Core\BlockRegistry for how a block type is defined. */
+    function page_blocks(PDO $pdo, int $pageId): array
+    {
+        try {
+            $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('page_blocks') . " WHERE page_id=? AND status='active' ORDER BY sort_order,id");
+            $stmt->execute([$pageId]);
+            $rows = $stmt->fetchAll();
+        } catch (\Throwable) {
+            return [];
+        }
+        foreach ($rows as &$row) {
+            $row['settings'] = json_decode((string) ($row['settings_json'] ?? '{}'), true) ?: [];
+        }
+        unset($row);
+        return $rows;
     }
 }
 

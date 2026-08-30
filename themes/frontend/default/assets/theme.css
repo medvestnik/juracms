@@ -300,6 +300,11 @@ a { color: var(--site-primary); }
 .post-card__excerpt { color: var(--site-text-muted); font-size: .92rem; flex: 1; }
 .post-card__more { font-size: .88rem; font-weight: 600; text-decoration: none; }
 
+/* Page-builder: image block */
+.block-image { margin: 0; }
+.block-image img { display: block; width: 100%; max-height: 520px; object-fit: cover; border-radius: 10px; }
+.block-image figcaption { margin-top: .6rem; font-size: .88rem; color: var(--site-text-muted); text-align: center; }
+
 /* Pagination */
 .pagination { display: flex; gap: .4rem; justify-content: center; margin-top: 2rem; flex-wrap: wrap; }
 .pagination a, .pagination span {

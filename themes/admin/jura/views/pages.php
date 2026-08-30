@@ -93,6 +93,7 @@ endif; ?>
     <div style="margin-top:1rem">
       <label class="jura-label">Вміст</label>
       <textarea class="jura-input" name="content" data-editor="simple-js-editor" rows="12"><?= e($p['content'] ?? '') ?></textarea>
+      <small style="color:#94a3b8">Використовується, коли обрано шаблон «Сторінка» (та деякими іншими шаблонами). Для шаблону «Конструктор блоків» (і «Головна», якщо додати блоки) вигляд редагується нижче, у «Блоки сторінки».</small>
     </div>
 
     <h3 style="margin:1.5rem 0 .5rem">SEO</h3>
@@ -130,6 +131,100 @@ endif; ?>
     </div>
   </form>
 </section>
+
+<?php if ($id = (int) ($p['id'] ?? 0)):
+  $pageBlocks = $blocks ?? [];
+  $blockTypes = $block_types ?? [];
+?>
+<section class="jura-card" id="blocks" style="margin-top:1rem">
+  <h2 style="margin-top:0">Блоки сторінки</h2>
+  <p style="color:#64748b;font-size:.85rem;margin:0 0 1rem">Конструктор блоків — рендериться шаблонами, що це підтримують (наразі: «Головна»). Перетягуйте картки, щоб змінити порядок.</p>
+
+  <?php if (empty($pageBlocks)): ?>
+  <p style="color:#888">Блоків ще немає.</p>
+  <?php else: ?>
+  <div id="blocks-list">
+    <?php foreach ($pageBlocks as $block): $bid = (int) $block['id']; $type = (string) $block['block_type']; $settings = $block['settings']; ?>
+    <div class="jura-card" data-id="<?= $bid ?>" style="margin-bottom:.75rem;border:1px solid var(--jura-border,#e2e8f0)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+        <div style="display:flex;align-items:center;gap:.6rem">
+          <span class="block-drag-handle" style="cursor:grab;color:#94a3b8;font-size:1.1rem;user-select:none">⠿</span>
+          <strong><?= e(\App\Core\BlockRegistry::label($type)) ?></strong>
+        </div>
+        <form method="post" action="/admin/pages/<?= $id ?>/blocks/<?= $bid ?>/delete" style="margin:0" onsubmit="return confirm('Видалити блок?')">
+          <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+          <button class="jura-btn" type="submit" style="padding:.25rem .6rem;font-size:.8rem;background:#fff1f2;color:#9f1239;border:1px solid #fecdd3">✕ Видалити</button>
+        </form>
+      </div>
+      <form method="post" action="/admin/pages/<?= $id ?>/blocks/<?= $bid ?>/update">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <?= \App\Core\BlockRegistry::adminForm($type, $settings) ?>
+        <button class="jura-btn jura-btn-secondary" type="submit" style="margin-top:.75rem">Зберегти блок</button>
+      </form>
+      <?php if ($type === 'image'): ?>
+      <form method="post" action="/admin/pages/<?= $id ?>/blocks/<?= $bid ?>/upload-image" enctype="multipart/form-data" style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--jura-border,#e2e8f0)">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+          <input type="file" name="image" accept="image/jpeg,image/png,image/webp" class="jura-input" style="flex:1;min-width:200px">
+          <button class="jura-btn jura-btn-primary" type="submit">Завантажити</button>
+          <?php if (!empty($settings['image'])): ?>
+          <button class="jura-btn" type="submit" name="remove_image" value="1" style="background:#fff1f2;color:#9f1239;border:1px solid #fecdd3">Видалити зображення</button>
+          <?php endif; ?>
+        </div>
+      </form>
+      <?php endif; ?>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <script>
+  (function(){
+    var list = document.getElementById('blocks-list');
+    if (!list) return;
+    var dragging = null;
+    Array.from(list.children).forEach(function(card){
+      var handle = card.querySelector('.block-drag-handle');
+      if (!handle) return;
+      card.setAttribute('draggable', 'false');
+      handle.addEventListener('mousedown', function(){ card.setAttribute('draggable', 'true'); });
+      card.addEventListener('dragend', function(){ card.setAttribute('draggable', 'false'); dragging = null; });
+    });
+    list.addEventListener('dragstart', function(e){
+      var card = e.target.closest('[data-id]'); if (!card) return;
+      dragging = card; card.style.opacity = '0.5';
+    });
+    list.addEventListener('dragend', function(e){
+      var card = e.target.closest('[data-id]'); if (card) card.style.opacity = '';
+    });
+    list.addEventListener('dragover', function(e){
+      e.preventDefault();
+      var card = e.target.closest('[data-id]'); if (!card || card === dragging) return;
+      var after = e.clientY > card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2;
+      list.insertBefore(dragging, after ? card.nextSibling : card);
+    });
+    list.addEventListener('drop', function(e){
+      e.preventDefault();
+      var ids = Array.from(list.children).map(function(c){ return c.dataset.id; });
+      fetch('/admin/pages/<?= $id ?>/blocks/reorder', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: '_token=<?= e(csrf_token()) ?>&ids=' + encodeURIComponent(JSON.stringify(ids))
+      });
+    });
+  })();
+  </script>
+  <?php endif; ?>
+
+  <form method="post" action="/admin/pages/<?= $id ?>/blocks/add" style="display:flex;gap:.6rem;align-items:center;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--jura-border,#e2e8f0)">
+    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+    <select class="jura-input" name="block_type" style="max-width:280px;margin:0">
+      <?php foreach ($blockTypes as $type => $label): ?>
+      <option value="<?= e($type) ?>"><?= e($label) ?></option>
+      <?php endforeach; ?>
+    </select>
+    <button class="jura-btn jura-btn-primary" type="submit">+ Додати блок</button>
+  </form>
+</section>
+<?php endif; ?>
 
 <?php else: ?>
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
