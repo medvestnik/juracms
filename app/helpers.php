@@ -108,7 +108,8 @@ if (!function_exists('page_template_options')) {
     function page_template_options(): array
     {
         $core = [
-            'page'     => 'Сторінка',
+            'page'     => 'Сторінка (заголовок + текст)',
+            'blocks'   => 'Конструктор блоків',
             'home'     => 'Головна',
             'blog'     => 'Блог',
             'contacts' => 'Контакти',

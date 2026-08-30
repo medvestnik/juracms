@@ -93,7 +93,7 @@ endif; ?>
     <div style="margin-top:1rem">
       <label class="jura-label">Вміст</label>
       <textarea class="jura-input" name="content" data-editor="simple-js-editor" rows="12"><?= e($p['content'] ?? '') ?></textarea>
-      <small style="color:#94a3b8">Використовується шаблонами, що не побудовані з блоків (нижче). Для шаблону «Головна» — редагуйте вигляд через «Блоки сторінки».</small>
+      <small style="color:#94a3b8">Використовується, коли обрано шаблон «Сторінка» (та деякими іншими шаблонами). Для шаблону «Конструктор блоків» (і «Головна», якщо додати блоки) вигляд редагується нижче, у «Блоки сторінки».</small>
     </div>
 
     <h3 style="margin:1.5rem 0 .5rem">SEO</h3>

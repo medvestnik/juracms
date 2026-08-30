@@ -1441,6 +1441,13 @@ if ($route) {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'blocks' => $pageBlocks, 'settings' => $settings], $common, $homeExtra)));
             } elseif (($page['template'] ?? '') === 'about') {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('about', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
+            } elseif (($page['template'] ?? '') === 'blocks') {
+                // Generic block-constructor template -- any page can opt into
+                // this from the "Шаблон" dropdown, not just Головна. Unlike
+                // home.php there's no legacy hardcoded layout to fall back to,
+                // so an empty block list just shows a "add blocks" notice.
+                $pageBlocks = page_blocks($pdo, (int) $page['id']);
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('blocks', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'blocks' => $pageBlocks, 'settings' => $settings], $common)));
             } elseif (!ModuleLoader::hookFirst('render_page_template', $page, $settings, $locale, $common, $pdo)) {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('page', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             }
