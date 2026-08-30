@@ -52,7 +52,7 @@ function cms_settings(PDO $pdo): array
     return $settings;
 }
 
-const CMS_SCHEMA_VERSION = '5';
+const CMS_SCHEMA_VERSION = '6';
 
 function ensure_cms_schema(PDO $pdo): void
 {
@@ -93,6 +93,10 @@ function ensure_cms_schema(PDO $pdo): void
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('form_submissions') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,form_code VARCHAR(120),locale VARCHAR(16) NULL,source_url VARCHAR(255) NULL,name VARCHAR(191) NULL,email VARCHAR(191) NULL,phone VARCHAR(80) NULL,message TEXT NULL,payload_json JSON NULL,status VARCHAR(40) DEFAULT 'new',ip_address VARCHAR(45) NULL,user_agent VARCHAR(255) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('migrations') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,migration VARCHAR(191) UNIQUE,batch INT UNSIGNED DEFAULT 1,executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('settings') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,setting_key VARCHAR(191) UNIQUE,setting_value TEXT NULL,setting_type VARCHAR(40) DEFAULT 'string',group_name VARCHAR(80) DEFAULT 'system',updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // Page-builder blocks (see App\Core\BlockRegistry) -- one row per block
+    // placed on a page, in display order. settings_json holds whatever
+    // fields that block type's admin_form/save_settings pair defined.
+    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('page_blocks') . " (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,page_id INT UNSIGNED NOT NULL,block_type VARCHAR(60) NOT NULL,settings_json JSON NULL,status VARCHAR(20) NOT NULL DEFAULT 'active',sort_order INT NOT NULL DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX page_order (page_id,sort_order)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     foreach ([
         ['settings', 'setting_type', "VARCHAR(40) DEFAULT 'string'"],
         ['settings', 'group_name', "VARCHAR(80) DEFAULT 'system'"],
@@ -624,6 +628,74 @@ if (str_starts_with($path, '/admin')) {
         view_admin('pages', ['title' => 'Додати сторінку', 'edit' => [], 'template_options' => page_template_options()]);
         exit;
     }
+    if (preg_match('#^/admin/pages/(\d+)/blocks/add$#', $path, $matches) && $method === 'POST') {
+        $pageId = (int) $matches[1];
+        $type = (string) ($_POST['block_type'] ?? '');
+        if (\App\Core\BlockRegistry::has($type)) {
+            $maxOrder = (int) $pdo->query('SELECT COALESCE(MAX(sort_order),0) FROM ' . jura_table('page_blocks') . ' WHERE page_id=' . $pageId)->fetchColumn();
+            $pdo->prepare('INSERT INTO ' . jura_table('page_blocks') . ' (page_id,block_type,settings_json,sort_order) VALUES (?,?,?,?)')
+                ->execute([$pageId, $type, '{}', $maxOrder + 1]);
+        }
+        redirect('/admin/pages/' . $pageId . '/edit#blocks');
+    }
+    if (preg_match('#^/admin/pages/(\d+)/blocks/(\d+)/update$#', $path, $matches) && $method === 'POST') {
+        [$pageId, $blockId] = [(int) $matches[1], (int) $matches[2]];
+        $block = $pdo->prepare('SELECT * FROM ' . jura_table('page_blocks') . ' WHERE id=? AND page_id=?');
+        $block->execute([$blockId, $pageId]);
+        $block = $block->fetch();
+        if ($block) {
+            $current = json_decode((string) ($block['settings_json'] ?? '{}'), true) ?: [];
+            $settings = \App\Core\BlockRegistry::saveSettings((string) $block['block_type'], $_POST, $current);
+            $pdo->prepare('UPDATE ' . jura_table('page_blocks') . ' SET settings_json=? WHERE id=?')->execute([json_encode($settings, JSON_UNESCAPED_UNICODE), $blockId]);
+        }
+        redirect('/admin/pages/' . $pageId . '/edit#blocks');
+    }
+    if (preg_match('#^/admin/pages/(\d+)/blocks/(\d+)/upload-image$#', $path, $matches) && $method === 'POST') {
+        [$pageId, $blockId] = [(int) $matches[1], (int) $matches[2]];
+        $block = $pdo->prepare('SELECT * FROM ' . jura_table('page_blocks') . ' WHERE id=? AND page_id=?');
+        $block->execute([$blockId, $pageId]);
+        $block = $block->fetch();
+        if ($block) {
+            $settings = json_decode((string) ($block['settings_json'] ?? '{}'), true) ?: [];
+            $uploadDir = BASE_PATH . '/public/userfiles/blocks/';
+            if (!is_dir($uploadDir)) { mkdir($uploadDir, 0755, true); }
+            $file = $_FILES['image'] ?? null;
+            if ($file && $file['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                    $filename = 'block-' . $blockId . '-' . time() . '.' . $ext;
+                    if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
+                        $oldImg = $settings['image'] ?? null;
+                        if ($oldImg && str_starts_with((string) $oldImg, 'block-') && file_exists($uploadDir . $oldImg)) {
+                            @unlink($uploadDir . $oldImg);
+                        }
+                        $settings['image'] = $filename;
+                    }
+                }
+            } elseif (!empty($_POST['remove_image'])) {
+                $settings['image'] = null;
+            }
+            $pdo->prepare('UPDATE ' . jura_table('page_blocks') . ' SET settings_json=? WHERE id=?')->execute([json_encode($settings, JSON_UNESCAPED_UNICODE), $blockId]);
+        }
+        redirect('/admin/pages/' . $pageId . '/edit#blocks');
+    }
+    if (preg_match('#^/admin/pages/(\d+)/blocks/(\d+)/delete$#', $path, $matches) && $method === 'POST') {
+        [$pageId, $blockId] = [(int) $matches[1], (int) $matches[2]];
+        $pdo->prepare('DELETE FROM ' . jura_table('page_blocks') . ' WHERE id=? AND page_id=?')->execute([$blockId, $pageId]);
+        redirect('/admin/pages/' . $pageId . '/edit#blocks');
+    }
+    if (preg_match('#^/admin/pages/(\d+)/blocks/reorder$#', $path, $matches) && $method === 'POST') {
+        $pageId = (int) $matches[1];
+        $ids = json_decode($_POST['ids'] ?? '[]', true);
+        if (is_array($ids)) {
+            foreach ($ids as $i => $id) {
+                $pdo->prepare('UPDATE ' . jura_table('page_blocks') . ' SET sort_order=? WHERE id=? AND page_id=?')->execute([$i + 1, (int) $id, $pageId]);
+            }
+        }
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit;
+    }
     if ($path === '/admin/pages' && $method === 'POST') {
         $status = (string) ($_POST['status'] ?? 'draft');
         $slug = trim((string) ($_POST['slug'] ?: slugify((string) $_POST['title'])));
@@ -650,6 +722,8 @@ if (str_starts_with($path, '/admin')) {
             'translations' => $editPage ? entity_translations($pdo, 'pages', $editPage) : [],
             'all_locales' => $localeRows,
             'template_options' => page_template_options(),
+            'blocks' => $editPage ? page_blocks($pdo, (int) $editPage['id']) : [],
+            'block_types' => \App\Core\BlockRegistry::labels(),
         ]);
         exit;
     }
@@ -1363,7 +1437,8 @@ if ($route) {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             } elseif (($page['template'] ?? '') === 'home') {
                 $homeExtra = ModuleLoader::hookCollect('home_data', $pdo, $locale);
-                frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common, $homeExtra)));
+                $pageBlocks = page_blocks($pdo, (int) $page['id']);
+                frontend_render_cached($frontendCacheKey, fn() => view_frontend('home', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'blocks' => $pageBlocks, 'settings' => $settings], $common, $homeExtra)));
             } elseif (($page['template'] ?? '') === 'about') {
                 frontend_render_cached($frontendCacheKey, fn() => view_frontend('about', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
             } elseif (!ModuleLoader::hookFirst('render_page_template', $page, $settings, $locale, $common, $pdo)) {

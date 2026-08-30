@@ -43,6 +43,7 @@ require_once BASE_PATH . '/app/helpers.php';
 require_once BASE_PATH . '/core/Support/helpers.php';
 require_once BASE_PATH . '/core/Installer/Runtime.php';
 require_once BASE_PATH . '/core/Updater/Updater.php';
+require_once BASE_PATH . '/core/Blocks/CoreBlocks.php';
 
 if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
     // Some shared-hosting setups make the filesystem session path unwritable
