@@ -248,7 +248,7 @@ echo "Готово\n";</pre>
 </section>
 
 <?php $curAuth = $settings['gitdeploy_auth_type'] ?? 'none'; ?>
-<details class="jura-card" style="margin-bottom:1rem" <?= $curAuth === 'none' ? 'open' : '' ?>>
+<details class="jura-card" style="margin-bottom:1rem" <?= ($curAuth === 'none' || !empty($flash_ssh_key)) ? 'open' : '' ?>>
   <summary style="cursor:pointer;font-weight:700">🔑 Налаштування: підключення та автор комітів</summary>
   <div class="jura-alert" style="margin-top:1rem">
     Один спільний блок — раніше "Налаштування" (ім'я/email) і зміна автентифікації були двома окремими формами, і збереження одної не чіпало іншу, через що легко було "зберегти" тільки ім'я/email і не помітити, що спосіб автентифікації лишився старим. Тепер усе зберігається однією кнопкою. Змінювати тут адресу/автентифікацію безпечно — файли сайту не чіпаються. Якщо <strong>git pull</strong> падає з помилкою <code>could not read Username for 'https://github.com'</code> — це означає, що нижче обрано «Без автентифікації» для приватного репозиторію.
