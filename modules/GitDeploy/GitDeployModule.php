@@ -390,10 +390,48 @@ function git_deploy_commit_and_push(PDO $pdo, array $files, string $message): ar
         @unlink(git_deploy_behind_cache_path($pdo));
         return ['success' => true, 'output' => $fullOut];
     }
-    return ['success' => false, 'error' => 'push не вдався', 'output' => $fullOut];
+
+    // The raw git output already explains what happened, but it's aimed at
+    // someone reading a terminal, not an admin panel -- point at the actual
+    // next action for the handful of causes seen in practice, instead of
+    // leaving "push не вдався" + a git hint in English as the only guidance.
+    $error = 'push не вдався';
+    if (str_contains($pushOut, 'non-fast-forward') || str_contains($pushOut, '[rejected]')) {
+        $error = 'push не вдався: на репозиторії вже є коміти, яких немає локально (наприклад, хтось інший запушив зміни, або їх додав інший процес). Натисніть «⬇ git pull» вище, а потім спробуйте commit & push ще раз.';
+    } elseif (stripos($pushOut, 'permission denied') !== false || stripos($pushOut, 'publickey') !== false) {
+        $error = 'push не вдався: доступ відхилено. Якщо використовуєте SSH-ключ — перевірте, що деплой-ключ додано в GitHub з правом «Allow write access»; якщо токен — що в нього є право на запис (repo scope).';
+    } elseif (stripos($pushOut, 'could not read username') !== false) {
+        $error = 'push не вдався: автентифікація не спрацювала для поточного способу підключення. Перевірте налаштування нижче — можливо, адреса репозиторію і обраний тип автентифікації (SSH/HTTPS) не узгоджені.';
+    }
+    return ['success' => false, 'error' => $error, 'output' => $fullOut];
 }
 
 // ── Init / connect wizard ────────────────────────────────────────────────
+// core.sshCommand / http.extraheader (set in git_deploy_cmd()) only take
+// effect when the remote itself uses the matching transport -- an
+// https:// remote always uses HTTPS regardless of core.sshCommand, and a
+// git@host:path (SSH shorthand) remote always uses SSH regardless of
+// http.extraheader. So switching the selected auth type without also
+// switching the remote's own URL scheme leaves the new auth silently
+// inert and push keeps failing, just with a different error each time.
+// Converts in whichever direction the newly selected auth type needs;
+// leaves the URL alone if it doesn't recognize the shape (e.g. a
+// ssh://host:port/path form, or an https URL with an explicit port --
+// the git@host:path shorthand has no room for a port number, so
+// converting one would produce a broken "git@host:port:path" remote).
+function git_deploy_normalize_remote_for_auth(string $remoteUrl, string $authType): array
+{
+    if ($authType === 'ssh_key' && preg_match('#^https?://([^:/]+)/(.+?)(?:\.git)?/?$#i', $remoteUrl, $m)) {
+        $converted = 'git@' . $m[1] . ':' . $m[2] . '.git';
+        return [$converted, "Адресу репозиторію автоматично переведено на SSH-формат (потрібно для core.sshCommand): {$remoteUrl} → {$converted}"];
+    }
+    if ($authType !== 'ssh_key' && preg_match('#^git@([^:/]+):(.+?)(?:\.git)?/?$#i', $remoteUrl, $m)) {
+        $converted = 'https://' . $m[1] . '/' . $m[2] . '.git';
+        return [$converted, "Адресу репозиторію автоматично переведено на HTTPS-формат: {$remoteUrl} → {$converted}"];
+    }
+    return [$remoteUrl, null];
+}
+
 function git_deploy_init_repo(PDO $pdo, array $data): array
 {
     $remoteUrl = trim((string) ($data['remote_url'] ?? ''));
@@ -408,22 +446,9 @@ function git_deploy_init_repo(PDO $pdo, array $data): array
     }
 
     $log = [];
-    // core.sshCommand (set in git_deploy_cmd() below) only has any effect
-    // when the remote itself uses SSH transport -- for an https:// remote,
-    // git always tries HTTPS regardless of that setting, so choosing
-    // "SSH-ключ" while the saved address is still https://github.com/...
-    // silently does nothing and push keeps failing with "could not read
-    // Username". Auto-convert the common host/path form so picking SSH
-    // auth actually switches the transport, not just the auth mechanism.
-    // Excludes a ":" from the host group so a URL with an explicit port
-    // (e.g. a self-hosted Gitea on a non-standard port) is left alone --
-    // the git@host:path shorthand has no room for a port number, so
-    // converting one would produce a broken "git@host:port:path" remote
-    // instead of just doing nothing.
-    if ($authType === 'ssh_key' && preg_match('#^https?://([^:/]+)/(.+?)(?:\.git)?/?$#i', $remoteUrl, $m)) {
-        $converted = 'git@' . $m[1] . ':' . $m[2] . '.git';
-        $log[] = "Адресу репозиторію автоматично переведено на SSH-формат (потрібно для core.sshCommand): {$remoteUrl} → {$converted}";
-        $remoteUrl = $converted;
+    [$remoteUrl, $conversionLog] = git_deploy_normalize_remote_for_auth($remoteUrl, $authType);
+    if ($conversionLog !== null) {
+        $log[] = $conversionLog;
     }
 
     save_setting($pdo, 'gitdeploy_auth_type', $authType, 'gitdeploy');
