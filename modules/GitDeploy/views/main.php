@@ -157,6 +157,82 @@ $configInfo = $config_info ?? [];
   </table>
 </section>
 
+<?php $migrations = $migrations ?? []; $pendingMigrations = array_filter($migrations, fn($m) => !$m['executed']); ?>
+<section class="jura-card" id="gd-migrations" style="margin-bottom:1rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+    <h2 style="margin:0">Міграції</h2>
+    <?php if (!empty($pendingMigrations)): ?>
+    <form method="post" action="/admin/gitdeploy/migrations/run-all" style="margin:0">
+      <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+      <button class="jura-btn jura-btn-primary" type="submit">▶ Запустити всі невиконані (<?= count($pendingMigrations) ?>)</button>
+    </form>
+    <?php endif; ?>
+  </div>
+  <p style="color:#64748b;font-size:.88rem;margin:0 0 1rem">Файли з <code>migrations/</code> — невеликі PHP-скрипти з прямим доступом до БД (<code>$pdo</code>), для змін схеми або одноразових запитів, без потреби в SSH/консолі БД.</p>
+  <?php if (empty($migrations)): ?>
+  <p style="color:#888">Файлів міграцій не знайдено в <code>migrations/</code>.</p>
+  <?php else: ?>
+  <table class="jura-table" style="margin-bottom:0">
+    <thead><tr><th>Файл міграції</th><th style="width:140px">Статус</th><th style="width:170px">Виконано</th><th style="width:110px">Дія</th></tr></thead>
+    <tbody>
+    <?php foreach ($migrations as $m): ?>
+      <tr>
+        <td>
+          <code><?= e($m['name']) ?></code>
+          <?php if ($m['is_query']): ?>
+          <span style="font-size:.72rem;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;border-radius:20px;padding:.1rem .5rem;margin-left:.35rem" title="Запит до БД — після виконання результат треба закомітити">запит до БД</span>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if ($m['executed']): ?>
+          <span style="font-size:.72rem;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;border-radius:20px;padding:.1rem .5rem">✓ Виконано</span>
+          <?php else: ?>
+          <span style="font-size:.72rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:20px;padding:.1rem .5rem">Очікує</span>
+          <?php endif; ?>
+        </td>
+        <td style="font-size:.82rem;color:#64748b"><?= e($m['executed_at'] ?? '—') ?></td>
+        <td>
+          <?php if (!$m['executed']): ?>
+          <form method="post" action="/admin/gitdeploy/migrations/run" style="margin:0">
+            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="migration" value="<?= e($m['name']) ?>">
+            <button class="jura-btn jura-btn-secondary" style="padding:.3rem .6rem;font-size:.8rem" type="submit">▶ Запустити</button>
+          </form>
+          <?php else: ?>
+          <form method="post" action="/admin/gitdeploy/migrations/rerun" style="margin:0" onsubmit="return confirm('Запустити повторно: <?= e($m['name']) ?>?\nЗапис з історії буде видалено, і міграція виконається заново.')">
+            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="migration" value="<?= e($m['name']) ?>">
+            <button class="jura-btn jura-btn-secondary" style="padding:.3rem .6rem;font-size:.8rem" type="submit" title="Запустити повторно">↻</button>
+          </form>
+          <?php endif; ?>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php endif; ?>
+
+  <details style="margin-top:1rem">
+    <summary style="cursor:pointer;font-weight:600;font-size:.9rem">Як створити міграцію</summary>
+    <div style="margin-top:.75rem;font-size:.85rem;color:#334155">
+      <p>Створіть файл у <code>migrations/</code> з іменем формату:</p>
+      <pre style="background:#0f172a;color:#e2e8f0;padding:.6rem .8rem;border-radius:8px;font-size:.78rem;overflow:auto">YYYYMMDD_HHMMSS_опис.php</pre>
+      <p>Усередині доступні змінні <code>$pdo</code> (PDO-з'єднання з БД сайту) та <code>$repoDir</code> (шлях до кореня репозиторію):</p>
+      <pre style="background:#0f172a;color:#e2e8f0;padding:.6rem .8rem;border-radius:8px;font-size:.78rem;overflow:auto">&lt;?php
+$pdo->exec("ALTER TABLE " . jura_table('products') . " ADD COLUMN custom_field VARCHAR(255) DEFAULT NULL");
+echo "Готово\n";</pre>
+      <p><strong>Запити до БД для AI</strong> — якщо потрібно, щоб AI отримав результат SQL-запиту (а не просто змінив схему), назвіть файл із префіксом <code>query_</code> одразу після дати/часу:</p>
+      <pre style="background:#0f172a;color:#e2e8f0;padding:.6rem .8rem;border-radius:8px;font-size:.78rem;overflow:auto">YYYYMMDD_HHMMSS_query_опис.php</pre>
+      <p>Такі міграції позначаються міткою «запит до БД». Усередині запишіть результат у файл репозиторію через <code>$repoDir</code>:</p>
+      <pre style="background:#0f172a;color:#e2e8f0;padding:.6rem .8rem;border-radius:8px;font-size:.78rem;overflow:auto">&lt;?php
+$row = $pdo->query("SELECT COUNT(*) AS cnt FROM " . jura_table('pages'))->fetch();
+file_put_contents($repoDir . '/migrations/results/pages_count.md', "Сторінок: " . $row['cnt']);
+echo "Готово\n";</pre>
+      <p>Після виконання такої міграції перейдіть на <strong>Зміни у файлах</strong> вище і закомітьте файл(и) результату — лише після коміту AI зможе прочитати їх у репозиторії.</p>
+    </div>
+  </details>
+</section>
+
 <?php $curAuth = $settings['gitdeploy_auth_type'] ?? 'none'; ?>
 <details class="jura-card" style="margin-bottom:1rem" <?= $curAuth === 'none' ? 'open' : '' ?>>
   <summary style="cursor:pointer;font-weight:700">🔑 Налаштування: підключення та автор комітів</summary>
@@ -205,6 +281,11 @@ $configInfo = $config_info ?? [];
       <label class="jura-label">Приватний SSH-ключ (залиште порожнім, якщо вже згенеровано раніше)</label>
       <textarea class="jura-input" name="ssh_key" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----" style="font-family:monospace;font-size:.8rem"></textarea>
       <button class="jura-btn jura-btn-secondary" type="submit" formaction="/admin/gitdeploy/generate-ssh-key" style="margin-top:.5rem">Згенерувати SSH-ключ на сервері</button>
+    </div>
+    <div style="margin-top:1rem">
+      <label class="jura-label">Ліміт часу на одну міграцію, сек (якщо порожньо — значення сервера)</label>
+      <input class="jura-input" type="number" min="0" step="1" name="migration_timeout" value="<?= e($settings['gitdeploy_migration_timeout'] ?? '') ?>" placeholder="Наприклад: 120" style="max-width:200px">
+      <p style="color:#64748b;font-size:.8rem;margin:.35rem 0 0">Якщо міграція виконується довше цього часу, PHP примусово її зупинить — це буде видно у виводі як «перевищено ліміт часу» замість тихого зависання. Міграція лишається невиконаною, тож її можна безпечно запустити повторно (наприклад, розбивши на менші частини).</p>
     </div>
     <button class="jura-btn jura-btn-primary" type="submit" style="margin-top:1.2rem">Зберегти</button>
   </form>

@@ -14,6 +14,16 @@ function git_deploy_ensure_schema(PDO $pdo): void
         output TEXT NULL,
         changed_files TEXT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // Tracks completed migrations from migrations/ -- see the "── Migrations ──"
+    // section below. Separate from core's own jura_migrations table (an
+    // unrelated, no-longer-actively-used leftover of a removed core feature).
+    $pdo->exec('CREATE TABLE IF NOT EXISTS ' . jura_table('gitdeploy_migrations') . " (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        migration VARCHAR(255) NOT NULL,
+        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        output TEXT NULL,
+        UNIQUE KEY migration (migration)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────
@@ -26,6 +36,7 @@ function git_deploy_settings(PDO $pdo): array
         'gitdeploy_author_name' => 'Jura CMS Git Deploy',
         'gitdeploy_author_email' => '',
         'gitdeploy_git_bin' => '',
+        'gitdeploy_migration_timeout' => '',
     ];
     $all = cms_settings($pdo);
     foreach ($defaults as $key => $default) {
@@ -48,6 +59,10 @@ function git_deploy_save_settings(PDO $pdo, array $data): void
     }
     if (isset($data['git_bin'])) {
         save_setting($pdo, 'gitdeploy_git_bin', trim((string) $data['git_bin']), 'gitdeploy');
+    }
+    if (isset($data['migration_timeout'])) {
+        $timeout = trim((string) $data['migration_timeout']);
+        save_setting($pdo, 'gitdeploy_migration_timeout', $timeout !== '' ? (string) max(0, (int) $timeout) : '', 'gitdeploy');
     }
 }
 
@@ -630,6 +645,151 @@ function git_deploy_save_schema_to_repo(PDO $pdo): array
     $path = git_deploy_repo_dir($pdo) . '/db_schema.md';
     $ok = @file_put_contents($path, $md) !== false;
     return ['success' => $ok, 'path' => $path, 'tables' => count($tables)];
+}
+
+// ── Migrations ───────────────────────────────────────────────────────────
+// Ported from the OpenCart Git Deploy module this was based on -- lets an
+// admin (or an AI agent working through git) drop a small PHP file with a
+// $pdo->query(...) call into migrations/, then run it from this admin page
+// instead of needing shell/DB console access. migrations/ is a real,
+// version-controlled directory (unlike storage/, which the default
+// .gitignore excludes), so files placed there survive a commit/push and a
+// later git pull on this or another site.
+function git_deploy_migrations_dir(): string
+{
+    $dir = BASE_PATH . '/migrations';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    return $dir;
+}
+
+// Naming convention: YYYYMMDD_HHMMSS_query_description.php marks a
+// read-only migration meant to report data back (e.g. for an AI agent to
+// read after it's committed) rather than change schema -- purely a
+// filename convention the UI uses to show a hint; nothing enforces it.
+function git_deploy_is_query_migration(string $filename): bool
+{
+    return (bool) preg_match('/^\d{8}_\d{6}_query_/', $filename);
+}
+
+function git_deploy_get_migrations(PDO $pdo): array
+{
+    $executed = [];
+    try {
+        $stmt = $pdo->query('SELECT migration, executed_at FROM ' . jura_table('gitdeploy_migrations') . ' ORDER BY migration');
+        foreach ($stmt->fetchAll() as $row) {
+            $executed[$row['migration']] = $row['executed_at'];
+        }
+    } catch (\Throwable) {
+        // table not migrated yet on this request
+    }
+
+    $files = [];
+    foreach (glob(git_deploy_migrations_dir() . '/*.php') ?: [] as $path) {
+        $name = basename($path);
+        $files[] = [
+            'name' => $name,
+            'executed' => isset($executed[$name]),
+            'executed_at' => $executed[$name] ?? null,
+            'is_query' => git_deploy_is_query_migration($name),
+        ];
+    }
+    // Filenames start with YYYYMMDD_HHMMSS, so a plain string compare is
+    // already a chronological sort -- reversed so the newest migrations
+    // (most likely just pulled in and still pending) show up first.
+    usort($files, static fn(array $a, array $b): int => strcmp($b['name'], $a['name']));
+    return $files;
+}
+
+function git_deploy_run_migration(PDO $pdo, string $filename): array
+{
+    $filename = basename($filename);
+    if (!preg_match('/^[A-Za-z0-9_.-]+\.php$/', $filename)) {
+        return ['success' => false, 'error' => 'Некоректна назва файлу міграції.'];
+    }
+    $path = git_deploy_migrations_dir() . '/' . $filename;
+    if (!is_file($path)) {
+        return ['success' => false, 'error' => 'Файл міграції не знайдено: ' . $filename];
+    }
+    $check = $pdo->prepare('SELECT id FROM ' . jura_table('gitdeploy_migrations') . ' WHERE migration=?');
+    $check->execute([$filename]);
+    if ($check->fetchColumn()) {
+        return ['success' => false, 'error' => 'Міграція вже виконана: ' . $filename];
+    }
+
+    // A migration that runs long enough to hit the PHP execution-time limit
+    // dies with an uncatchable fatal error partway through `include` -- no
+    // exception, no return value, just a broken response, and the
+    // migration is left neither marked done nor reported as failed
+    // (silently re-runnable, but with no visible explanation why it
+    // "didn't work"). Set an explicit, known budget -- configurable in
+    // Settings, since hosts vary widely in their own default -- and use a
+    // shutdown handler (the only way to observe this specific failure
+    // mode) to log it clearly instead of leaving it ambiguous.
+    $timeoutSetting = (int) (git_deploy_settings($pdo)['gitdeploy_migration_timeout'] ?? 0);
+    if ($timeoutSetting > 0) {
+        @set_time_limit($timeoutSetting);
+    }
+
+    $finished = false;
+    register_shutdown_function(static function () use (&$finished, $pdo, $filename, $timeoutSetting): void {
+        if ($finished) {
+            return;
+        }
+        $lastError = error_get_last();
+        $isTimeout = $lastError && stripos($lastError['message'], 'maximum execution time') !== false;
+        $partial = (string) @ob_get_clean();
+        $message = $isTimeout
+            ? 'Перевищено ліміт часу виконання (' . ($timeoutSetting > 0 ? $timeoutSetting : (int) ini_get('max_execution_time')) . 'с) — міграція не завершилась. Дані могли застосуватися частково. Збільште ліміт у Налаштуваннях або розбийте міграцію на менші частини, потім запустіть її ще раз.'
+            : 'Міграція перервалась несподівано' . ($lastError ? (': ' . $lastError['message']) : '.');
+        try {
+            git_deploy_write_log($pdo, 'migration', $filename, false, $message . ($partial !== '' ? "\n\n" . $partial : ''));
+        } catch (\Throwable) {
+        }
+    });
+
+    ob_start();
+    try {
+        // Available to the migration file: $pdo (query the site's DB) and
+        // $repoDir (e.g. to write a query_ migration's result into a file
+        // for later commit).
+        $repoDir = git_deploy_repo_dir($pdo);
+        include $path;
+        $output = (string) ob_get_clean();
+        $pdo->prepare('INSERT INTO ' . jura_table('gitdeploy_migrations') . ' (migration,output) VALUES (?,?)')->execute([$filename, $output]);
+        $finished = true;
+        return ['success' => true, 'output' => $output !== '' ? $output : 'OK', 'is_query' => git_deploy_is_query_migration($filename)];
+    } catch (\Throwable $e) {
+        $output = (string) @ob_get_clean();
+        $finished = true;
+        git_deploy_write_log($pdo, 'migration', $filename, false, $e->getMessage() . ($output !== '' ? "\n\n" . $output : ''));
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
+
+function git_deploy_rerun_migration(PDO $pdo, string $filename): array
+{
+    $pdo->prepare('DELETE FROM ' . jura_table('gitdeploy_migrations') . ' WHERE migration=?')->execute([basename($filename)]);
+    return git_deploy_run_migration($pdo, $filename);
+}
+
+function git_deploy_run_pending_migrations(PDO $pdo): array
+{
+    $results = [];
+    foreach (git_deploy_get_migrations($pdo) as $m) {
+        if ($m['executed']) {
+            continue;
+        }
+        $result = git_deploy_run_migration($pdo, $m['name']);
+        $results[] = [
+            'migration' => $m['name'],
+            'success' => $result['success'],
+            'output' => $result['output'] ?? ($result['error'] ?? ''),
+            'is_query' => $m['is_query'],
+        ];
+    }
+    return $results;
 }
 
 // ── Config info (masked — safe to show an AI working from the repo) ────
