@@ -33,6 +33,7 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
             'status' => $isRepo ? git_deploy_get_status($pdo) : [],
             'logs' => git_deploy_get_logs($pdo),
             'config_info' => git_deploy_config_info($pdo),
+            'migrations' => $isRepo ? git_deploy_get_migrations($pdo) : [],
             'flash_success' => session_flash('gd_success'),
             'flash_error' => session_flash('gd_error'),
             'flash_output' => session_flash('gd_output'),
@@ -112,6 +113,42 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
         $result = git_deploy_save_schema_to_repo($pdo);
         session_flash($result['success'] ? 'gd_success' : 'gd_error', $result['success'] ? "Схему БД збережено у db_schema.md ({$result['tables']} таблиць)." : 'Не вдалося записати файл.');
         redirect('/admin/gitdeploy');
+        return true;
+    }
+
+    if ($path === '/admin/gitdeploy/migrations/run' && $method === 'POST') {
+        $result = git_deploy_run_migration($pdo, (string) ($_POST['migration'] ?? ''));
+        session_flash($result['success'] ? 'gd_success' : 'gd_error', $result['success'] ? 'Міграцію виконано.' . (!empty($result['is_query']) ? ' Це запит до БД — перейдіть на Commit & push і закомітьте файл(и) результату, щоб AI зміг їх побачити.' : '') : ($result['error'] ?? 'Помилка'));
+        session_flash('gd_output', (string) ($result['output'] ?? ($result['error'] ?? '')));
+        redirect('/admin/gitdeploy#gd-migrations');
+        return true;
+    }
+
+    if ($path === '/admin/gitdeploy/migrations/rerun' && $method === 'POST') {
+        $result = git_deploy_rerun_migration($pdo, (string) ($_POST['migration'] ?? ''));
+        session_flash($result['success'] ? 'gd_success' : 'gd_error', $result['success'] ? 'Міграцію повторно виконано.' : ($result['error'] ?? 'Помилка'));
+        session_flash('gd_output', (string) ($result['output'] ?? ($result['error'] ?? '')));
+        redirect('/admin/gitdeploy#gd-migrations');
+        return true;
+    }
+
+    if ($path === '/admin/gitdeploy/migrations/run-all' && $method === 'POST') {
+        $results = git_deploy_run_pending_migrations($pdo);
+        if (empty($results)) {
+            session_flash('gd_success', 'Немає невиконаних міграцій.');
+        } else {
+            $allOk = true;
+            $hasQuery = false;
+            $lines = [];
+            foreach ($results as $r) {
+                $allOk = $allOk && $r['success'];
+                $hasQuery = $hasQuery || (!empty($r['is_query']) && $r['success']);
+                $lines[] = ($r['success'] ? '✓' : '✗') . ' ' . $r['migration'] . ":\n" . $r['output'];
+            }
+            session_flash($allOk ? 'gd_success' : 'gd_error', ($allOk ? 'Виконано міграцій: ' : 'Виконано з помилками: ') . count($results) . ($hasQuery ? '. Серед них є запит до БД — перейдіть на Commit & push і закомітьте файл(и) результату, щоб AI зміг їх побачити.' : '.'));
+            session_flash('gd_output', implode("\n---\n", $lines));
+        }
+        redirect('/admin/gitdeploy#gd-migrations');
         return true;
     }
 
