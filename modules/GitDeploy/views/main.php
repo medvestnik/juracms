@@ -345,8 +345,8 @@ $logPageUrl     = static function (int $pg): string { return '/admin/gitdeploy?l
         <td style="font-size:.82rem;color:#64748b"><?= e($l['executed_at']) ?></td>
         <td><?= ((int) $l['success']) === 1 ? '✓' : '✕' ?></td>
         <td>
-          <button type="button" class="jura-btn jura-btn-secondary" style="padding:.25rem .6rem;font-size:.78rem"
-            onclick="gdShowLog(this)"
+          <button type="button" class="jura-btn jura-btn-secondary gd-log-toggle" style="padding:.25rem .6rem;font-size:.78rem"
+            onclick="gdToggleLog(this)"
             data-name="<?= e($l['type'] . ': ' . $l['name']) ?>"
             data-output="<?= e((string) ($l['output'] ?? '')) ?>"
             data-changed="<?= e((string) ($l['changed_files'] ?? '')) ?>">Переглянути</button>
@@ -362,7 +362,18 @@ $logPageUrl     = static function (int $pg): string { return '/admin/gitdeploy?l
     <pre id="gd-log-content" style="background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:8px;overflow:auto;max-height:400px;font-size:.78rem;line-height:1.5;white-space:pre-wrap"></pre>
   </div>
   <script>
-  function gdShowLog(btn) {
+  var gdActiveLogBtn = null;
+  function gdToggleLog(btn) {
+    var box = document.getElementById('gd-log-box');
+    if (gdActiveLogBtn === btn) {
+      box.style.display = 'none';
+      btn.textContent = 'Переглянути';
+      gdActiveLogBtn = null;
+      return;
+    }
+    if (gdActiveLogBtn) {
+      gdActiveLogBtn.textContent = 'Переглянути';
+    }
     var output = btn.getAttribute('data-output') || '';
     var changed = btn.getAttribute('data-changed') || '';
     document.getElementById('gd-log-title').textContent = btn.getAttribute('data-name') || '';
@@ -374,9 +385,10 @@ $logPageUrl     = static function (int $pg): string { return '/admin/gitdeploy?l
     } else {
       changedWrap.style.display = 'none';
     }
-    var box = document.getElementById('gd-log-box');
     box.style.display = 'block';
     box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    btn.textContent = 'Сховати';
+    gdActiveLogBtn = btn;
   }
   </script>
 
