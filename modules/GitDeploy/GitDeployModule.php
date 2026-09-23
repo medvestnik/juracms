@@ -617,6 +617,11 @@ function git_deploy_generate_ssh_key(): array
         return ['success' => false, 'error' => 'На сервері не знайдено ssh-keygen (перевірено /usr/bin, /usr/local/bin та PATH). Згенеруйте пару ключів на своєму комп’ютері (ssh-keygen -t ed25519) і вставте приватний ключ у поле нижче.'];
     }
 
+    $dir = git_deploy_storage_dir();
+    if (!is_dir($dir) || !is_writable($dir)) {
+        return ['success' => false, 'error' => "Немає прав на запис у {$dir} — перевірте власника/права директорії storage/ на хостингу."];
+    }
+
     $keyPath = git_deploy_ssh_key_path();
     $pubPath = $keyPath . '.pub';
     @unlink($keyPath);
@@ -624,10 +629,16 @@ function git_deploy_generate_ssh_key(): array
 
     $comment = 'jura-gitdeploy@' . preg_replace('/[^a-z0-9.-]/i', '', $_SERVER['SERVER_NAME'] ?? 'site');
     $cmd = escapeshellarg($sshKeygen) . ' -t ed25519 -f ' . escapeshellarg($keyPath) . ' -N ' . escapeshellarg('') . ' -C ' . escapeshellarg($comment) . ' 2>&1';
-    safe_shell_exec($cmd);
+    $output = trim(safe_shell_exec($cmd));
 
     if (!is_file($keyPath) || !is_file($pubPath)) {
-        return ['success' => false, 'error' => 'Не вдалося згенерувати ключ.'];
+        // Surface the actual command output instead of a generic message --
+        // this is the only way to tell apart the several very different
+        // reasons this can fail (disable_functions silently ignoring the
+        // call, ssh-keygen erroring on a read-only/full disk, an
+        // open_basedir restriction, etc.) without SSH access to the server.
+        $detail = $output !== '' ? $output : '(команда не повернула жодного виводу — можливо, exec()/shell_exec() частково обмежені хостингом попри те, що загальна перевірка shell_exec пройшла)';
+        return ['success' => false, 'error' => "Не вдалося згенерувати ключ.\n\nВивід команди:\n{$detail}"];
     }
     @chmod($keyPath, 0600);
 
