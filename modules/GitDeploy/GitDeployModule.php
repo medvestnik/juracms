@@ -407,6 +407,25 @@ function git_deploy_init_repo(PDO $pdo, array $data): array
         return ['success' => false, 'error' => 'Вкажіть адресу репозиторію'];
     }
 
+    $log = [];
+    // core.sshCommand (set in git_deploy_cmd() below) only has any effect
+    // when the remote itself uses SSH transport -- for an https:// remote,
+    // git always tries HTTPS regardless of that setting, so choosing
+    // "SSH-ключ" while the saved address is still https://github.com/...
+    // silently does nothing and push keeps failing with "could not read
+    // Username". Auto-convert the common host/path form so picking SSH
+    // auth actually switches the transport, not just the auth mechanism.
+    // Excludes a ":" from the host group so a URL with an explicit port
+    // (e.g. a self-hosted Gitea on a non-standard port) is left alone --
+    // the git@host:path shorthand has no room for a port number, so
+    // converting one would produce a broken "git@host:port:path" remote
+    // instead of just doing nothing.
+    if ($authType === 'ssh_key' && preg_match('#^https?://([^:/]+)/(.+?)(?:\.git)?/?$#i', $remoteUrl, $m)) {
+        $converted = 'git@' . $m[1] . ':' . $m[2] . '.git';
+        $log[] = "Адресу репозиторію автоматично переведено на SSH-формат (потрібно для core.sshCommand): {$remoteUrl} → {$converted}";
+        $remoteUrl = $converted;
+    }
+
     save_setting($pdo, 'gitdeploy_auth_type', $authType, 'gitdeploy');
     if ($authType === 'https_token') {
         // A blank token on a reconnect (auth type already was https_token,
@@ -429,7 +448,6 @@ function git_deploy_init_repo(PDO $pdo, array $data): array
         }
     }
 
-    $log = [];
     $git = git_deploy_cmd($pdo);
 
     if (!git_deploy_is_repo($pdo)) {
