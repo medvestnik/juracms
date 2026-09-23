@@ -152,11 +152,20 @@ function git_deploy_write_log(PDO $pdo, string $type, string $name, bool $succes
         ->execute([$type, $name, $success ? 1 : 0, $output, $changedFiles]);
 }
 
-function git_deploy_get_logs(PDO $pdo, int $limit = 50): array
+function git_deploy_get_logs(PDO $pdo, int $limit = 20, int $offset = 0): array
 {
-    $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('gitdeploy_log') . ' ORDER BY id DESC LIMIT ' . (int) $limit);
+    $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('gitdeploy_log') . ' ORDER BY id DESC LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset);
     $stmt->execute();
     return $stmt->fetchAll();
+}
+
+function git_deploy_count_logs(PDO $pdo): int
+{
+    try {
+        return (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table('gitdeploy_log'))->fetchColumn();
+    } catch (\Throwable) {
+        return 0;
+    }
 }
 
 // ── Connection status ────────────────────────────────────────────────────

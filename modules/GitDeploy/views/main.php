@@ -324,13 +324,19 @@ echo "Готово\n";</pre>
 
 <?php endif; ?>
 
-<section class="jura-card" style="margin-top:1rem">
+<?php
+$logsPage       = $logs_page ?? 1;
+$logsTotalPages = $logs_total_pages ?? 1;
+$logsTotal      = $logs_total ?? count($logs ?? []);
+$logPageUrl     = static function (int $pg): string { return '/admin/gitdeploy?log_page=' . $pg . '#gd-logs'; };
+?>
+<section class="jura-card" style="margin-top:1rem" id="gd-logs">
   <h2 style="margin-top:0">Останні операції</h2>
   <?php if (empty($logs)): ?>
   <p style="color:#888">Ще не виконано жодної операції.</p>
   <?php else: ?>
   <table class="jura-table">
-    <thead><tr><th>Тип</th><th>Опис</th><th>Час</th><th>Результат</th></tr></thead>
+    <thead><tr><th>Тип</th><th>Опис</th><th>Час</th><th>Результат</th><th style="width:110px">Дії</th></tr></thead>
     <tbody>
     <?php foreach ($logs as $l): ?>
       <tr>
@@ -338,9 +344,66 @@ echo "Готово\n";</pre>
         <td><?= e($l['name']) ?></td>
         <td style="font-size:.82rem;color:#64748b"><?= e($l['executed_at']) ?></td>
         <td><?= ((int) $l['success']) === 1 ? '✓' : '✕' ?></td>
+        <td>
+          <button type="button" class="jura-btn jura-btn-secondary" style="padding:.25rem .6rem;font-size:.78rem"
+            onclick="gdShowLog(this)"
+            data-name="<?= e($l['type'] . ': ' . $l['name']) ?>"
+            data-output="<?= e((string) ($l['output'] ?? '')) ?>"
+            data-changed="<?= e((string) ($l['changed_files'] ?? '')) ?>">Переглянути</button>
+        </td>
       </tr>
     <?php endforeach; ?>
     </tbody>
   </table>
+
+  <div id="gd-log-box" style="display:none;margin-top:1rem">
+    <h3 id="gd-log-title" style="font-size:.9rem"></h3>
+    <p id="gd-log-changed-wrap" style="display:none;font-size:.82rem;color:#64748b;margin:.25rem 0">Змінені файли: <span id="gd-log-changed"></span></p>
+    <pre id="gd-log-content" style="background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:8px;overflow:auto;max-height:400px;font-size:.78rem;line-height:1.5;white-space:pre-wrap"></pre>
+  </div>
+  <script>
+  function gdShowLog(btn) {
+    var output = btn.getAttribute('data-output') || '';
+    var changed = btn.getAttribute('data-changed') || '';
+    document.getElementById('gd-log-title').textContent = btn.getAttribute('data-name') || '';
+    document.getElementById('gd-log-content').textContent = output.trim() !== '' ? output : '(немає виводу)';
+    var changedWrap = document.getElementById('gd-log-changed-wrap');
+    if (changed.trim() !== '') {
+      document.getElementById('gd-log-changed').textContent = changed;
+      changedWrap.style.display = 'block';
+    } else {
+      changedWrap.style.display = 'none';
+    }
+    var box = document.getElementById('gd-log-box');
+    box.style.display = 'block';
+    box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+  </script>
+
+  <?php if ($logsTotalPages > 1): ?>
+  <nav style="display:flex;align-items:center;gap:.4rem;margin-top:1rem;flex-wrap:wrap">
+    <?php if ($logsPage > 1): ?>
+    <a href="<?= e($logPageUrl($logsPage - 1)) ?>" class="jura-btn jura-btn-secondary" style="padding:.3rem .65rem">&larr;</a>
+    <?php endif; ?>
+    <?php
+    $lpStart = max(1, $logsPage - 3);
+    $lpEnd   = min($logsTotalPages, $logsPage + 3);
+    if ($lpStart > 1): ?>
+      <a href="<?= e($logPageUrl(1)) ?>" class="jura-btn jura-btn-secondary" style="padding:.3rem .55rem">1</a>
+      <?php if ($lpStart > 2): ?><span style="color:#94a3b8">…</span><?php endif; ?>
+    <?php endif; ?>
+    <?php for ($pg = $lpStart; $pg <= $lpEnd; $pg++): ?>
+    <a href="<?= e($logPageUrl($pg)) ?>" class="jura-btn <?= $pg === $logsPage ? 'jura-btn-primary' : 'jura-btn-secondary' ?>" style="padding:.3rem .55rem"><?= $pg ?></a>
+    <?php endfor; ?>
+    <?php if ($lpEnd < $logsTotalPages): ?>
+      <?php if ($lpEnd < $logsTotalPages - 1): ?><span style="color:#94a3b8">…</span><?php endif; ?>
+      <a href="<?= e($logPageUrl($logsTotalPages)) ?>" class="jura-btn jura-btn-secondary" style="padding:.3rem .55rem"><?= $logsTotalPages ?></a>
+    <?php endif; ?>
+    <?php if ($logsPage < $logsTotalPages): ?>
+    <a href="<?= e($logPageUrl($logsPage + 1)) ?>" class="jura-btn jura-btn-secondary" style="padding:.3rem .65rem">&rarr;</a>
+    <?php endif; ?>
+    <span style="font-size:.8rem;color:#94a3b8;margin-left:.5rem">Всього: <?= (int) $logsTotal ?></span>
+  </nav>
+  <?php endif; ?>
   <?php endif; ?>
 </section>
