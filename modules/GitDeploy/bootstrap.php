@@ -66,6 +66,9 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
     if ($path === '/admin/gitdeploy/commit' && $method === 'POST') {
         $files = (array) ($_POST['files'] ?? []);
         $message = trim((string) ($_POST['message'] ?? ''));
+        if ($message === '') {
+            $message = git_deploy_auto_commit_message($files);
+        }
         if (!$files) {
             session_flash('gd_error', 'Виберіть хоча б один файл.');
         } elseif ($message === '') {
@@ -100,8 +103,17 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
     if ($path === '/admin/gitdeploy/generate-ssh-key' && $method === 'POST') {
         $result = git_deploy_generate_ssh_key();
         if ($result['success']) {
+            // Without this, the auth_type radio the user just picked
+            // (ssh_key) is never actually saved -- only /admin/gitdeploy/init
+            // saves it. On the next page load the form falls back to
+            // whatever auth type was saved before (often "https_token" or
+            // "none"), so the SSH panel visually collapses and the radio
+            // reverts, even though the key itself generated fine. Persist
+            // it immediately so the reload shows "SSH-ключ" selected with
+            // the key ready, matching what the user just did.
+            save_setting($pdo, 'gitdeploy_auth_type', 'ssh_key', 'gitdeploy');
             session_flash('gd_ssh_key', (string) ($result['public_key']));
-            session_flash('gd_success', 'SSH-ключ згенеровано. Скопіюйте публічний ключ нижче і додайте його в GitHub → Settings → Deploy keys.');
+            session_flash('gd_success', 'SSH-ключ згенеровано. Скопіюйте публічний ключ нижче і додайте його в GitHub → Settings → Deploy keys (з правом запису, якщо плануєте робити push). Тип автентифікації нижче вже перемкнено на «SSH-ключ» — натисніть «Зберегти», щоб підтвердити.');
         } else {
             session_flash('gd_error', $result['error']);
         }
