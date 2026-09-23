@@ -66,6 +66,9 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
     if ($path === '/admin/gitdeploy/commit' && $method === 'POST') {
         $files = (array) ($_POST['files'] ?? []);
         $message = trim((string) ($_POST['message'] ?? ''));
+        if ($message === '') {
+            $message = git_deploy_auto_commit_message($files);
+        }
         if (!$files) {
             session_flash('gd_error', 'Виберіть хоча б один файл.');
         } elseif ($message === '') {

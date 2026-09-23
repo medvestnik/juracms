@@ -119,7 +119,7 @@ $configInfo = $config_info ?? [];
       </tbody>
     </table>
     <div style="display:flex;gap:.6rem;align-items:flex-start;flex-wrap:wrap">
-      <input class="jura-input" name="message" placeholder="Повідомлення коміту" style="flex:1;min-width:240px;margin:0" required>
+      <input class="jura-input" id="gd-commit-message" name="message" placeholder="Повідомлення коміту (порожнє поле — заповниться автоматично)" style="flex:1;min-width:240px;margin:0">
       <button class="jura-btn jura-btn-primary" type="submit">Commit &amp; push</button>
       <button class="jura-btn jura-btn-secondary" type="submit" formaction="/admin/gitdeploy/gitignore" formnovalidate>Додати до .gitignore</button>
     </div>
@@ -139,6 +139,20 @@ $configInfo = $config_info ?? [];
         document.getElementById('gd-diff-box').style.display = 'block';
       });
   }
+  (function(){
+    var form = document.getElementById('gd-commit-form');
+    var msgInput = document.getElementById('gd-commit-message');
+    if (!form || !msgInput) return;
+    form.addEventListener('submit', function(){
+      if (msgInput.value.trim() !== '') return;
+      var checked = Array.from(document.querySelectorAll('.gd-file-cb:checked')).map(function(c){ return c.value; });
+      if (!checked.length) return;
+      var names = checked.map(function(p){ return p.split('/').pop(); });
+      var shown = names.slice(0, 3).join(', ');
+      var rest = names.length - 3;
+      msgInput.value = 'Оновлено: ' + shown + (rest > 0 ? ' та ще ' + rest + ' файл(ів)' : '');
+    });
+  })();
   </script>
   <?php endif; ?>
 </section>

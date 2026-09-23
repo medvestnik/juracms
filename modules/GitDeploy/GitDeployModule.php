@@ -333,6 +333,22 @@ function git_deploy_get_diff(PDO $pdo, string $file): string
 }
 
 // ── Commit & push ────────────────────────────────────────────────────────
+// A sensible default so a forgotten commit message doesn't block the whole
+// commit (or, before this, was simply rejected with "введіть повідомлення").
+// Names a few of the selected files plus the total count, e.g.
+// "Оновлено: index.php, styles.css та ще 9 файл(ів)".
+function git_deploy_auto_commit_message(array $files): string
+{
+    $files = array_values(array_filter(array_map('trim', $files)));
+    if (!$files) {
+        return '';
+    }
+    $names = array_map(static fn(string $f): string => basename($f), $files);
+    $shown = array_slice($names, 0, 3);
+    $rest = count($names) - count($shown);
+    return 'Оновлено: ' . implode(', ', $shown) . ($rest > 0 ? ' та ще ' . $rest . ' файл(ів)' : '');
+}
+
 function git_deploy_commit_and_push(PDO $pdo, array $files, string $message): array
 {
     $git = git_deploy_cmd($pdo);
