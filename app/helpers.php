@@ -2,7 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Core\Schema;
 use App\Core\View;
+use App\Models\LocaleModel;
+use App\Models\MenuModel;
+use App\Models\RouteModel;
+use App\Models\SettingModel;
 use Core\Installer\Runtime as InstallerRuntime;
 
 if (!function_exists('config_value')) {
@@ -438,5 +443,68 @@ if (!function_exists('frontend_render_cached')) {
         $html = (string) ob_get_clean();
         cache_put($cacheKey, $html);
         echo $html;
+    }
+}
+
+if (!function_exists('ensure_path')) {
+    function ensure_path(string $path): string
+    {
+        $path = '/' . trim($path, '/');
+        return $path === '//' ? '/' : $path;
+    }
+}
+
+// ── Thin global delegates ────────────────────────────────────────────────
+// These bodies used to live directly in index.php; the actual queries now
+// live in App\Models\* / App\Core\Schema. They stay callable as plain global
+// functions here because modules (GitDeploy, Hotel, Portfolio, ...) and
+// theme views call them by these exact names.
+
+if (!function_exists('setting_value')) {
+    function setting_value(PDO $pdo, string $key, mixed $default = null): mixed
+    {
+        return SettingModel::get($pdo, $key, $default);
+    }
+}
+
+if (!function_exists('save_setting')) {
+    function save_setting(PDO $pdo, string $key, mixed $value, string $group = 'system', string $type = 'string'): void
+    {
+        SettingModel::set($pdo, $key, $value, $group, $type);
+    }
+}
+
+if (!function_exists('cms_settings')) {
+    function cms_settings(PDO $pdo): array
+    {
+        return SettingModel::all($pdo);
+    }
+}
+
+if (!function_exists('active_locales')) {
+    function active_locales(PDO $pdo): array
+    {
+        return LocaleModel::active($pdo);
+    }
+}
+
+if (!function_exists('current_locale')) {
+    function current_locale(PDO $pdo, string $path): array
+    {
+        return RouteModel::currentLocale($pdo, $path);
+    }
+}
+
+if (!function_exists('frontend_menu_items')) {
+    function frontend_menu_items(PDO $pdo, string $code, string $locale = ''): array
+    {
+        return MenuModel::frontendItems($pdo, $code, $locale);
+    }
+}
+
+if (!function_exists('ensure_cms_schema')) {
+    function ensure_cms_schema(PDO $pdo): void
+    {
+        Schema::ensure($pdo);
     }
 }
