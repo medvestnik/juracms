@@ -38,3 +38,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Built module distribution zips (delivered to the user, not repo content)
+/*.zip

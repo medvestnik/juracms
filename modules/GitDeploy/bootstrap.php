@@ -24,6 +24,10 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
             return true;
         }
         $isRepo = git_deploy_is_repo($pdo);
+        $logsPerPage = 20;
+        $logsTotal = git_deploy_count_logs($pdo);
+        $logsTotalPages = max(1, (int) ceil($logsTotal / $logsPerPage));
+        $logsPage = max(1, min($logsTotalPages, (int) ($_GET['log_page'] ?? 1)));
         $render('main', [
             'title' => 'Git Deploy',
             'shell_disabled' => false,
@@ -31,7 +35,10 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
             'settings' => git_deploy_settings($pdo),
             'info' => $isRepo ? git_deploy_get_info($pdo) : null,
             'status' => $isRepo ? git_deploy_get_status($pdo) : [],
-            'logs' => git_deploy_get_logs($pdo),
+            'logs' => git_deploy_get_logs($pdo, $logsPerPage, ($logsPage - 1) * $logsPerPage),
+            'logs_total' => $logsTotal,
+            'logs_page' => $logsPage,
+            'logs_total_pages' => $logsTotalPages,
             'config_info' => git_deploy_config_info($pdo),
             'migrations' => $isRepo ? git_deploy_get_migrations($pdo) : [],
             'flash_success' => session_flash('gd_success'),
