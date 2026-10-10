@@ -1,4 +1,8 @@
-<?php $modules = $modules ?? []; ?>
+<?php $modules = $modules ?? []; $moduleUpdates = $module_updates ?? []; ?>
+<form method="get" action="/admin/modules" style="margin-bottom:1rem">
+  <button class="jura-btn jura-btn-secondary" type="submit" name="check_versions" value="1">Перевірити оновлення модулів</button>
+  <span style="font-size:.82rem;color:#64748b">Оновлення модулів виконується окремо від ядра JuraCMS.</span>
+</form>
 <div style="margin-bottom:1.5rem">
   <p style="color:#64748b;font-size:.9rem;margin:0">Тут можна встановлювати та видаляти модулі розширення JuraCMS. Доступні модулі визначаються наявністю директорій у папці <code>modules/</code>.</p>
 </div>
@@ -42,6 +46,18 @@
           <span style="font-size:.72rem;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;border-radius:20px;padding:.1rem .5rem">Не встановлено</span>
           <?php endif; ?>
         </div>
+        <?php $update = $moduleUpdates[$mod['slug']] ?? null; ?>
+        <?php if ($update): ?>
+        <p style="font-size:.8rem;margin:.4rem 0">
+          <?php if ($update['state'] === 'current'): ?>
+            ✓ Актуальна версія v<?= e($update['current']) ?>
+          <?php elseif ($update['state'] === 'outdated'): ?>
+            Доступне оновлення: v<?= e($update['current']) ?> → v<?= e($update['latest']) ?>
+          <?php else: ?>
+            <?= e($update['message'] ?? 'Невідомий статус') ?>
+          <?php endif; ?>
+        </p>
+        <?php endif; ?>
         <?php if (!empty($mod['description'])): ?>
         <p style="font-size:.85rem;color:#64748b;margin:0"><?= e($mod['description']) ?></p>
         <?php endif; ?>
@@ -51,6 +67,14 @@
       </div>
     </div>
     <div style="display:flex;gap:.5rem;margin-top:auto">
+      <?php if ($mod['installed'] && !empty($update) && $update['state'] === 'outdated'): ?>
+      <form method="post" style="margin:0" onsubmit="return confirm('Оновити модуль <?= e($mod['name']) ?>? Резервна копія поточної версії буде збережена.')">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="module_update">
+        <input type="hidden" name="slug" value="<?= e($mod['slug']) ?>">
+        <button class="jura-btn jura-btn-primary" type="submit">Оновити до v<?= e($update['latest']) ?></button>
+      </form>
+      <?php endif; ?>
       <?php if ($mod['installed']): ?>
       <form method="post" style="margin:0">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
