@@ -112,10 +112,21 @@ final class ModuleUpdates
             self::remove($tmp);
             return ['ok' => false, 'message' => 'Не вдалося створити резервну копію модуля.'];
         }
-        if (!@rename($stage, $target)) {
-            @rename($backup, $target);
+        // Temporary directories are often on another filesystem (/tmp vs /var/www).
+        // PHP rename() cannot move a directory across filesystems, so copy to a
+        // sibling of the target first, then atomically rename on the same volume.
+        $localStage = BASE_PATH . '/modules/.' . $dir . '-update-' . bin2hex(random_bytes(6));
+        if (!self::copyDirectory($stage, $localStage)) {
+            self::remove($localStage);
+            $restored = @rename($backup, $target);
             self::remove($tmp);
-            return ['ok' => false, 'message' => 'Помилка встановлення. Попередню версію відновлено.'];
+            return ['ok' => false, 'message' => 'Не вдалося скопіювати файли модуля.' . ($restored ? ' Попередню версію відновлено.' : ' УВАГА: відновлення не вдалося; резервна копія: ' . $backup)];
+        }
+        if (!@rename($localStage, $target)) {
+            self::remove($localStage);
+            $restored = @rename($backup, $target);
+            self::remove($tmp);
+            return ['ok' => false, 'message' => 'Не вдалося активувати модуль.' . ($restored ? ' Попередню версію відновлено.' : ' УВАГА: відновлення не вдалося; резервна копія: ' . $backup)];
         }
         self::remove($tmp);
         return ['ok' => true, 'message' => 'Модуль ' . $dir . ' оновлено до v' . $manifest['version'] . '. Резервна копія: ' . $backup];
@@ -136,6 +147,28 @@ final class ModuleUpdates
         $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         return is_string($data) && $http >= 200 && $http < 300 ? $data : null;
+    }
+
+    private static function copyDirectory(string $from, string $to): bool
+    {
+        if (!@mkdir($to, 0755)) return false;
+        $iterator = new \\RecursiveIteratorIterator(
+            new \\RecursiveDirectoryIterator($from, \\FilesystemIterator::SKIP_DOTS),
+            \\RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($iterator as $item) {
+            $relative = substr($item->getPathname(), strlen($from) + 1);
+            $dest = $to . '/' . $relative;
+            if ($item->isDir()) {
+                if (!is_dir($dest) && !@mkdir($dest, 0755, true)) return false;
+            } elseif (!$item->isLink()) {
+                if (!@copy($item->getPathname(), $dest)) return false;
+                @chmod($dest, 0644);
+            } else {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static function remove(string $directory): void
