@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\ModuleLoader;
+use App\Core\ModuleUpdates;
 use PDO;
 
 final class ModuleController
@@ -13,6 +14,12 @@ final class ModuleController
     {
         if ($method === 'POST') {
             $action = (string) ($_POST['action'] ?? '');
+            if ($action === 'module_update') {
+                $slug = (string) ($_POST['slug'] ?? '');
+                $result = ModuleUpdates::update($slug);
+                session_flash($result['ok'] ? 'modules_success' : 'modules_error', $result['message']);
+                redirect('/admin/modules');
+            }
             if ($action === 'upload') {
                 $file = $_FILES['module_zip'] ?? null;
                 if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
@@ -37,7 +44,13 @@ final class ModuleController
             }
             redirect('/admin/modules');
         }
+        $updates = $_SESSION['module_update_checks'] ?? [];
+        if ($method === 'GET' && isset($_GET['check_versions'])) {
+            $updates = ['gitdeploy' => ModuleUpdates::check('gitdeploy')];
+            $_SESSION['module_update_checks'] = $updates;
+        }
         view_admin('modules', [
+            'module_updates' => $updates,
             'title' => 'Модулі',
             'modules' => ModuleLoader::available($pdo),
             'flash_success' => session_flash('modules_success'),
