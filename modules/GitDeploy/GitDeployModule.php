@@ -172,7 +172,7 @@ function git_deploy_count_logs(PDO $pdo): int
 function git_deploy_get_info(PDO $pdo, bool $forceFetch = false): array
 {
     $git = git_deploy_cmd($pdo);
-    $info = ['no_commits' => false, 'branch' => '', 'commit' => '', 'remote' => '', 'behind' => 0, 'last_pull_changed' => '', 'last_pull_at' => ''];
+    $info = ['no_commits' => false, 'branch' => '', 'commit' => '', 'remote' => '', 'behind' => 0, 'ahead' => 0, 'last_pull_changed' => '', 'last_pull_at' => ''];
 
     $branchOut = trim(safe_shell_exec($git . ' rev-parse --abbrev-ref HEAD 2>&1'));
     $noCommits = str_contains($branchOut, 'fatal');
@@ -199,6 +199,11 @@ function git_deploy_get_info(PDO $pdo, bool $forceFetch = false): array
         $behind = (string) @file_get_contents($cacheFile);
     }
     $info['behind'] = ctype_digit(trim($behind)) ? (int) trim($behind) : 0;
+    $upstream = trim(safe_shell_exec($git . ' rev-parse --abbrev-ref --symbolic-full-name @{u} 2>&1'));
+    if ($upstream !== '' && !str_contains($upstream, 'fatal')) {
+        $ahead = trim(safe_shell_exec($git . ' rev-list --count ' . escapeshellarg($upstream . '..HEAD') . ' 2>&1'));
+        $info['ahead'] = ctype_digit($ahead) ? (int) $ahead : 0;
+    }
 
     $stmt = $pdo->prepare('SELECT changed_files,executed_at FROM ' . jura_table('gitdeploy_log') . " WHERE type='pull' AND success=1 ORDER BY id DESC LIMIT 1");
     $stmt->execute();
@@ -415,6 +420,33 @@ function git_deploy_commit_and_push(PDO $pdo, array $files, string $message): ar
     return ['success' => false, 'error' => $error, 'output' => $fullOut];
 }
 
+// Send already committed changes without creating another commit.
+function git_deploy_push(PDO $pdo): array
+{
+    $git = git_deploy_cmd($pdo);
+    $branch = trim(safe_shell_exec($git . ' symbolic-ref --short HEAD 2>&1'));
+    if ($branch === '' || str_contains($branch, 'fatal')) {
+        return ['success' => false, 'error' => 'Не вдалося визначити поточну гілку.', 'output' => $branch];
+    }
+
+    $ahead = trim(safe_shell_exec($git . ' rev-list --count ' . escapeshellarg('origin/' . $branch . '..HEAD') . ' 2>&1'));
+    if (!ctype_digit($ahead)) {
+        return ['success' => false, 'error' => 'Не вдалося перевірити локальні коміти. Перевірте origin та виконайте Fetch.', 'output' => $ahead];
+    }
+    if ((int) $ahead === 0) {
+        return ['success' => true, 'output' => 'Немає локальних комітів для відправлення.'];
+    }
+
+    $out = trim(safe_shell_exec($git . ' push origin ' . escapeshellarg($branch) . ' 2>&1'));
+    $success = !preg_match('/(fatal:|error:|remote rejected|\\[rejected\\]|permission denied|failed to push|write access.*not granted)/i', $out);
+    git_deploy_write_log($pdo, 'push', 'Повторний Push (' . $ahead . ' комітів)', $success, $out);
+    if ($success) {
+        @unlink(git_deploy_behind_cache_path($pdo));
+        return ['success' => true, 'output' => $out];
+    }
+    return ['success' => false, 'error' => 'Push не вдався. Коміти залишилися локально; перевірте права токена та повідомлення Git.', 'output' => $out];
+}
+
 // ── Init / connect wizard ────────────────────────────────────────────────
 // core.sshCommand / http.extraheader (set in git_deploy_cmd()) only take
 // effect when the remote itself uses the matching transport -- an
@@ -523,7 +555,11 @@ function git_deploy_init_repo(PDO $pdo, array $data): array
     if ($ok) {
         $remoteHasBranch = trim(safe_shell_exec($git . ' ls-remote --heads origin ' . escapeshellarg($branch) . ' 2>&1'));
         if ($remoteHasBranch !== '') {
-            $log[] = "Увага: на репозиторії вже є гілка «{$branch}» з власною історією. Перед першим Commit & Push зробіть Git Pull, інакше push буде відхилено.";
+            $remoteRef = 'origin/' . $branch;
+            $behind = trim(safe_shell_exec($git . ' rev-list --count ' . escapeshellarg('HEAD..' . $remoteRef) . ' 2>&1'));
+            if (ctype_digit($behind) && (int) $behind > 0) {
+                $log[] = "Увага: origin/{$branch} містить {$behind} нових комітів. Перед Push перевірте зміни та зробіть Pull.";
+            }
         }
     }
 
