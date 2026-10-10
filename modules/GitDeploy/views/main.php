@@ -92,11 +92,19 @@ $configInfo = $config_info ?? [];
     <tr><td style="padding:.3rem 0;color:#94a3b8">Останній коміт</td><td><?= e($info['commit'] ?? '—') ?></td></tr>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Remote</td><td><code><?= e($info['remote'] ?? '—') ?></code></td></tr>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Позаду origin</td><td><?= (int) ($info['behind'] ?? 0) ?> комітів</td></tr>
+    <tr><td style="padding:.3rem 0;color:#94a3b8">Попереду origin</td><td><?= (int) ($info['ahead'] ?? 0) ?> комітів</td></tr>
   </table>
   <form method="post" action="/admin/gitdeploy/pull" style="display:inline">
     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
     <button class="jura-btn jura-btn-primary" type="submit">⬇ git pull</button>
   </form>
+  <?php if ((int) ($info['ahead'] ?? 0) > 0): ?>
+  <form method="post" action="/admin/gitdeploy/push" style="display:inline;margin-left:.5rem">
+    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+    <button class="jura-btn jura-btn-primary" type="submit">⬆ Push (<?= (int) $info['ahead'] ?>)</button>
+  </form>
+  <p style="font-size:.83rem;color:#92400e;margin:.7rem 0 0">Є локальні коміти, що ще не відправлені до GitHub. Push не створює новий коміт.</p>
+  <?php endif; ?>
 </section>
 
 <section class="jura-card" style="margin-bottom:1rem">
