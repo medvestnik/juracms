@@ -70,6 +70,14 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
         return true;
     }
 
+    if ($path === '/admin/gitdeploy/push' && $method === 'POST') {
+        $result = git_deploy_push($pdo);
+        session_flash($result['success'] ? 'gd_success' : 'gd_error', $result['success'] ? 'Push виконано.' : ($result['error'] ?? 'Помилка'));
+        session_flash('gd_output', (string) ($result['output'] ?? ''));
+        redirect('/admin/gitdeploy');
+        return true;
+    }
+
     if ($path === '/admin/gitdeploy/commit' && $method === 'POST') {
         $files = (array) ($_POST['files'] ?? []);
         $message = trim((string) ($_POST['message'] ?? ''));
