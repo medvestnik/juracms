@@ -66,9 +66,9 @@
         <?php endif; ?>
       </div>
     </div>
-    <div style="display:flex;gap:.5rem;margin-top:auto">
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:auto;min-width:0">
       <?php if ($mod['installed'] && !empty($update) && $update['state'] === 'outdated'): ?>
-      <form method="post" style="margin:0" onsubmit="return confirm('Оновити модуль <?= e($mod['name']) ?>? Резервна копія поточної версії буде збережена.')">
+      <form method="post" style="margin:0;max-width:100%" onsubmit="return confirm('Оновити модуль <?= e($mod['name']) ?>? Резервна копія поточної версії буде збережена.')">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="module_update">
         <input type="hidden" name="slug" value="<?= e($mod['slug']) ?>">
@@ -76,7 +76,7 @@
       </form>
       <?php endif; ?>
       <?php if ($mod['installed']): ?>
-      <form method="post" style="margin:0">
+      <form method="post" style="margin:0;max-width:100%">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="slug" value="<?= e($mod['slug']) ?>">
         <?php if ($mod['enabled']): ?>
@@ -91,17 +91,17 @@
         </button>
         <?php endif; ?>
       </form>
-      <form method="post" style="margin:0">
+      <form method="post" style="margin:0;max-width:100%">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="slug" value="<?= e($mod['slug']) ?>">
         <input type="hidden" name="action" value="uninstall">
-        <button type="submit" class="jura-btn" style="background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;padding:.35rem .8rem;font-size:.83rem"
+        <button type="submit" class="jura-btn" style="background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;padding:.35rem .8rem;font-size:.83rem;white-space:normal"
           onclick="return confirm('Видалити модуль «<?= e($mod['name']) ?>»? Дані не будуть видалені.')">
           Видалити модуль
         </button>
       </form>
       <?php else: ?>
-      <form method="post" style="margin:0">
+      <form method="post" style="margin:0;max-width:100%">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="slug" value="<?= e($mod['slug']) ?>">
         <input type="hidden" name="action" value="install">
