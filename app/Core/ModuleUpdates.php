@@ -152,9 +152,9 @@ final class ModuleUpdates
     private static function copyDirectory(string $from, string $to): bool
     {
         if (!@mkdir($to, 0755)) return false;
-        $iterator = new \\RecursiveIteratorIterator(
-            new \\RecursiveDirectoryIterator($from, \\FilesystemIterator::SKIP_DOTS),
-            \\RecursiveIteratorIterator::SELF_FIRST
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($from, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
         );
         foreach ($iterator as $item) {
             $relative = substr($item->getPathname(), strlen($from) + 1);
