@@ -200,7 +200,10 @@ function git_deploy_get_info(PDO $pdo, bool $forceFetch = false): array
     }
     $info['behind'] = ctype_digit(trim($behind)) ? (int) trim($behind) : 0;
     $upstream = trim(safe_shell_exec($git . ' rev-parse --abbrev-ref --symbolic-full-name @{u} 2>&1'));
-    if ($upstream !== '' && !str_contains($upstream, 'fatal')) {
+    if ($upstream === '' || str_contains($upstream, 'fatal')) {
+        $upstream = 'origin/' . $info['branch'];
+    }
+    if ($upstream !== '') {
         $ahead = trim(safe_shell_exec($git . ' rev-list --count ' . escapeshellarg($upstream . '..HEAD') . ' 2>&1'));
         $info['ahead'] = ctype_digit($ahead) ? (int) $ahead : 0;
     }
@@ -438,7 +441,7 @@ function git_deploy_push(PDO $pdo): array
     }
 
     $out = trim(safe_shell_exec($git . ' push origin ' . escapeshellarg($branch) . ' 2>&1'));
-    $success = !preg_match('/(fatal:|error:|remote rejected|\\[rejected\\]|permission denied|failed to push|write access.*not granted)/i', $out);
+    $success = !preg_match('/(fatal:|error:|remote rejected|\[rejected\]|permission denied|failed to push|write access.*not granted)/i', $out);
     git_deploy_write_log($pdo, 'push', 'Повторний Push (' . $ahead . ' комітів)', $success, $out);
     if ($success) {
         @unlink(git_deploy_behind_cache_path($pdo));
