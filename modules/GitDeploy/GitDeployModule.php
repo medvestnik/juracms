@@ -210,6 +210,40 @@ function git_deploy_get_info(PDO $pdo, bool $forceFetch = false): array
 }
 
 // ── Pull ─────────────────────────────────────────────────────────────────
+
+/**
+ * Called only when a merge conflict is limited to exactly the VERSION file.
+ * Reads both sides' content from the conflicted index (stage 2 = ours,
+ * stage 3 = theirs), and if both look like a plain dotted version string
+ * (e.g. "1.0.11"), keeps the higher one, writes it, and completes the merge
+ * commit. Returns a short description of what it did on success, or null if
+ * anything looks unexpected -- the caller then falls back to the normal
+ * abort-and-ask-for-manual-resolution path rather than guessing.
+ */
+function git_deploy_resolve_version_conflict(PDO $pdo, string $git): ?string
+{
+    $ours = trim(safe_shell_exec($git . ' show :2:VERSION 2>&1'));
+    $theirs = trim(safe_shell_exec($git . ' show :3:VERSION 2>&1'));
+    $versionPattern = '/^\d+(\.\d+)*$/';
+    if (!preg_match($versionPattern, $ours) || !preg_match($versionPattern, $theirs)) {
+        return null;
+    }
+
+    $chosen = version_compare($ours, $theirs, '>=') ? $ours : $theirs;
+    $path = git_deploy_repo_dir($pdo) . '/VERSION';
+    if (@file_put_contents($path, $chosen . "\n") === false) {
+        return null;
+    }
+
+    safe_shell_exec($git . ' add VERSION 2>&1');
+    $commitOut = trim(safe_shell_exec($git . ' commit --no-edit 2>&1'));
+    if ($commitOut === '' || str_contains($commitOut, 'fatal') || str_contains($commitOut, 'error')) {
+        return null;
+    }
+
+    return "Локальна версія: {$ours}, у репозиторії: {$theirs} — обрано {$chosen}.\n{$commitOut}";
+}
+
 function git_deploy_pull(PDO $pdo): array
 {
     $git = git_deploy_cmd($pdo);
@@ -227,7 +261,25 @@ function git_deploy_pull(PDO $pdo): array
     }
 
     $hasConflict = str_contains($output, 'CONFLICT') || str_contains($output, 'Automatic merge failed');
-    $success = !$hasConflict && !str_contains($output, 'error') && !str_contains($output, 'fatal');
+
+    // VERSION is a single version-string line, and in practice the single
+    // most common conflict this module hits: this site's own update history
+    // and the generic repo's release process can each bump it independently,
+    // and a plain git merge can't reconcile two different values on the same
+    // line on its own. When the conflict is limited to just that file, it's
+    // low-risk enough to resolve automatically (keep whichever side has the
+    // higher version) instead of aborting and asking for SSH/a terminal,
+    // which most sites running this module don't have.
+    if ($hasConflict) {
+        $unmergedFiles = array_values(array_filter(array_map('trim', explode("\n", safe_shell_exec($git . ' diff --name-only --diff-filter=U 2>&1')))));
+        if ($unmergedFiles === ['VERSION']) {
+            $resolution = git_deploy_resolve_version_conflict($pdo, $git);
+            if ($resolution !== null) {
+                $hasConflict = false;
+                $output .= "\n\n=== Авто-вирішення конфлікту у VERSION ===\n{$resolution}";
+            }
+        }
+    }
 
     // A conflicted merge leaves conflict markers (<<<<<<< HEAD / ======= /
     // >>>>>>>) written directly into whatever files collided -- if one of
@@ -241,6 +293,8 @@ function git_deploy_pull(PDO $pdo): array
         $abortOutput = trim(safe_shell_exec($git . ' merge --abort 2>&1'));
         $output .= "\n\n=== git merge --abort (автоматично, щоб не лишати сайт з конфліктами у файлах) ===\n" . ($abortOutput !== '' ? $abortOutput : 'виконано');
     }
+
+    $success = !$hasConflict && !str_contains($output, 'error') && !str_contains($output, 'fatal');
 
     $changedFiles = '';
     if ($success) {
