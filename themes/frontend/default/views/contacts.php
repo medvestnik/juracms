@@ -2,6 +2,8 @@
 $page = $page ?? [];
 $settings = $settings ?? [];
 $mapEmbed = trim((string) ($settings['google_maps_embed'] ?? ''));
+$recaptchaSiteKey = trim((string) ($settings['recaptcha_site_key'] ?? ''));
+$formError = (($_GET['form_error'] ?? '') === 'contact') ? 'Підтвердьте, що ви не робот, і спробуйте ще раз.' : null;
 $showPhone = ($settings['show_phone'] ?? '1') !== '0';
 $contactCards = [];
 if ($showPhone && !empty($settings['contact_phone'])) {
@@ -53,14 +55,23 @@ if (!empty($settings['contact_address'])) {
       <?php endif; ?>
 
       <h2 style="margin-top:0">Написати нам</h2>
+      <?php if ($formError): ?>
+      <p style="color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:.6rem .9rem;margin:0 0 .75rem"><?= e($formError) ?></p>
+      <?php endif; ?>
       <form method="post" action="/forms/contact" style="display:grid;gap:.75rem;max-width:420px">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input class="jura-input" style="margin:0" type="text" name="name" placeholder="Ваше ім'я" required>
         <input class="jura-input" style="margin:0" type="text" name="phone" placeholder="Телефон">
         <input class="jura-input" style="margin:0" type="email" name="email" placeholder="Email">
         <textarea class="jura-input" style="margin:0" name="message" rows="4" placeholder="Повідомлення"></textarea>
+        <?php if ($recaptchaSiteKey !== ''): ?>
+        <div class="g-recaptcha" data-sitekey="<?= e($recaptchaSiteKey) ?>"></div>
+        <?php endif; ?>
         <button class="btn btn-primary" type="submit">Надіслати</button>
       </form>
+      <?php if ($recaptchaSiteKey !== ''): ?>
+      <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+      <?php endif; ?>
     </div>
 
     <?php if ($mapEmbed !== ''): ?>

@@ -15,7 +15,7 @@ use PDO;
  */
 final class Schema
 {
-    public const VERSION = '6';
+    public const VERSION = '7';
 
     public static function ensure(PDO $pdo): void
     {
@@ -119,6 +119,8 @@ final class Schema
             ['google_ads_id', '', 'integrations'],
             ['fb_pixel_id', '', 'integrations'],
             ['fb_access_token', '', 'integrations'],
+            ['recaptcha_site_key', '', 'integrations'],
+            ['recaptcha_secret_key', '', 'integrations'],
             ['menu_header', 'main', 'system'],
             ['menu_footer', 'main', 'system'],
             ['telegram_bot_token', '', 'notifications'],

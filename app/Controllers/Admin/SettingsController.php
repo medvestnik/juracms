@@ -27,7 +27,7 @@ final class SettingsController
             if (str_starts_with((string) $key, 'contact_') || str_starts_with((string) $key, 'social_') || (string) $key === 'contact_address' || (string) $key === 'show_phone') {
                 $group = 'contacts';
             }
-            if (in_array((string) $key, ['google_maps_embed', 'gtm_id', 'ga4_id', 'google_ads_id', 'fb_pixel_id', 'fb_access_token'], true)) {
+            if (in_array((string) $key, ['google_maps_embed', 'gtm_id', 'ga4_id', 'google_ads_id', 'fb_pixel_id', 'fb_access_token', 'recaptcha_site_key', 'recaptcha_secret_key'], true)) {
                 $group = 'integrations';
             }
             if (str_starts_with((string) $key, 'telegram_') || (string) $key === 'notification_email_to') {

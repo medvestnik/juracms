@@ -131,6 +131,22 @@
   </section>
 
   <section class="jura-card" style="margin-bottom:1rem">
+    <h2 style="margin-top:0">Захист від спаму (Google reCAPTCHA)</h2>
+    <p style="color:#64748b;font-size:.875rem;margin-top:0">Захищає форму «Написати нам» (і будь-яку іншу форму на сайті, що йде через <code>/forms/...</code>) від спам-ботів. Залиште поля порожніми, щоб вимкнути перевірку.</p>
+    <div class="jura-grid jura-grid-2" style="gap:1rem">
+      <div>
+        <label class="jura-label">Site key</label>
+        <input class="jura-input" name="settings[recaptcha_site_key]" value="<?= e($s['recaptcha_site_key'] ?? '') ?>" placeholder="6Lc...">
+      </div>
+      <div>
+        <label class="jura-label">Secret key</label>
+        <input class="jura-input" name="settings[recaptcha_secret_key]" value="<?= e($s['recaptcha_secret_key'] ?? '') ?>" placeholder="6Lc...">
+      </div>
+    </div>
+    <p style="font-size:.8rem;color:#94a3b8;margin-top:.75rem">Отримайте обидва ключі на <a href="https://www.google.com/recaptcha/admin/create" target="_blank" rel="noopener">google.com/recaptcha/admin</a> — тип reCAPTCHA v2 («Прапорець»), домен вашого сайту.</p>
+  </section>
+
+  <section class="jura-card" style="margin-bottom:1rem">
     <h2 style="margin-top:0">Публікації (блог)</h2>
     <div class="jura-grid jura-grid-2" style="gap:1rem">
       <div>
