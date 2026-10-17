@@ -247,6 +247,7 @@ function git_deploy_resolve_version_conflict(PDO $pdo, string $git): ?string
 function git_deploy_pull(PDO $pdo): array
 {
     $git = git_deploy_cmd($pdo);
+    $remoteFix = git_deploy_ensure_remote_matches_auth($pdo, $git);
     $headBefore = trim(safe_shell_exec($git . ' rev-parse HEAD 2>&1'));
 
     $branch = trim(safe_shell_exec($git . ' symbolic-ref --short HEAD 2>&1'));
@@ -258,6 +259,10 @@ function git_deploy_pull(PDO $pdo): array
 
     if (str_contains($output, 'reconcile divergent branches') || str_contains($output, 'refusing to merge unrelated histories')) {
         $output = safe_shell_exec($git . ' pull origin ' . escapeshellarg($branch) . ' --no-rebase --allow-unrelated-histories 2>&1');
+    }
+
+    if ($remoteFix !== null) {
+        $output = "=== Виправлено адресу репозиторію ===\n{$remoteFix}\n\n{$output}";
     }
 
     $hasConflict = str_contains($output, 'CONFLICT') || str_contains($output, 'Automatic merge failed');
@@ -443,10 +448,14 @@ function git_deploy_commit_and_push(PDO $pdo, array $files, string $message): ar
     }
 
     $branch = trim(safe_shell_exec($git . ' rev-parse --abbrev-ref HEAD 2>&1'));
+    $remoteFix = git_deploy_ensure_remote_matches_auth($pdo, $git);
     $pushOut = trim(safe_shell_exec($git . ' push origin ' . escapeshellarg($branch) . ' 2>&1'));
     $success = !str_contains($pushOut, 'error') && !str_contains($pushOut, 'fatal');
 
     $fullOut = "=== git commit ===\n{$commitOut}\n\n=== git push origin {$branch} ===\n{$pushOut}";
+    if ($remoteFix !== null) {
+        $fullOut = "=== Виправлено адресу репозиторію ===\n{$remoteFix}\n\n{$fullOut}";
+    }
     git_deploy_write_log($pdo, 'push', $message, $success, $fullOut, implode("\n", $files));
 
     if ($success) {
@@ -493,6 +502,37 @@ function git_deploy_normalize_remote_for_auth(string $remoteUrl, string $authTyp
         return [$converted, "Адресу репозиторію автоматично переведено на HTTPS-формат: {$remoteUrl} → {$converted}"];
     }
     return [$remoteUrl, null];
+}
+
+// git_deploy_normalize_remote_for_auth() above only ever ran from the
+// "Підключити" form -- which is hidden the moment a repo is already
+// connected (see views/main.php's "if (!$isRepo)" guard). So a remote
+// that drifted out of sync with the saved auth type (predates this fix,
+// or the auth type got changed some other way) could never self-correct
+// again through the UI -- pull/push would just fail the same transport
+// error forever, even though git_deploy_commit_and_push()'s own error
+// message points at "settings below" that don't exist for an already-
+// connected repo. Call this at the top of pull/push instead: it re-checks
+// the actual remote on every operation and fixes it transparently,
+// exactly like the init form would have, with no UI needed.
+function git_deploy_ensure_remote_matches_auth(PDO $pdo, string $git): ?string
+{
+    $authType = (string) git_deploy_settings($pdo)['gitdeploy_auth_type'];
+    // `git config --get`, not `remote get-url`: the latter resolves any
+    // url.<base>.insteadOf rewrite rules before returning a value, which
+    // would mask the literally-stored scheme this check needs to compare
+    // against auth_type (and could undo a host's own legitimate insteadOf
+    // setup by "fixing" what it resolves to, not what's actually saved).
+    $current = trim(safe_shell_exec($git . ' config --get remote.origin.url 2>&1'));
+    if ($current === '' || str_contains($current, 'fatal') || str_contains($current, 'No such')) {
+        return null;
+    }
+    [$normalized, $log] = git_deploy_normalize_remote_for_auth($current, $authType);
+    if ($log === null || $normalized === $current) {
+        return null;
+    }
+    safe_shell_exec($git . ' remote set-url origin ' . escapeshellarg($normalized) . ' 2>&1');
+    return $log;
 }
 
 function git_deploy_init_repo(PDO $pdo, array $data): array
