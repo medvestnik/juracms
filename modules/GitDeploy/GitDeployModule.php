@@ -538,7 +538,12 @@ function git_deploy_write_default_gitignore(PDO $pdo): string
     $existing = is_file($path) ? (string) file_get_contents($path) : '';
     $existingLines = $existing !== '' ? preg_split('/\r\n|\r|\n/', $existing) : [];
 
-    $defaults = ['/config.php', '/storage/', '/uploads/', '/cache/', '/logs/', '*.log', '.DS_Store', 'Thumbs.db'];
+    // /.github/ -- the generic CMS repo's own CI workflows (e.g. its
+    // auto-release version bump) land on disk via Updater::runAutomaticUpdate()
+    // and have no business being committed into a deployed site's own repo;
+    // committing one back in reintroduces an auto-commit race against this
+    // same push flow (see git_deploy_commit_and_push()'s non-fast-forward handling).
+    $defaults = ['/config.php', '/storage/', '/uploads/', '/cache/', '/logs/', '*.log', '.DS_Store', 'Thumbs.db', '/.github/'];
     $toAdd = array_values(array_diff($defaults, $existingLines));
     if (!$toAdd) {
         return '.gitignore: типові виключення вже присутні.';

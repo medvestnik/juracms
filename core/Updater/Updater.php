@@ -335,6 +335,18 @@ final class Updater
             return true;
         }
 
+        // .github/ (CI workflows for the generic juracms repo itself, e.g.
+        // its own auto-release bump-and-tag workflow) is repository
+        // infrastructure, never something a deployed site should run. It
+        // used to get copied onto every site's disk here and then committed
+        // back into that site's own repo by its next Git Deploy push,
+        // reintroducing the auto-release workflow there -- which then races
+        // every subsequent push with its own auto-commit (see GitDeploy's
+        // git_deploy_commit_and_push() non-fast-forward handling).
+        if ($top === '.github') {
+            return true;
+        }
+
         if ($top === 'themes') {
             $area = $segments[1] ?? '';
             $theme = $segments[2] ?? '';
