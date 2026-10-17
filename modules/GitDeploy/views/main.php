@@ -92,6 +92,14 @@ $configInfo = $config_info ?? [];
     <tr><td style="padding:.3rem 0;color:#94a3b8">Останній коміт</td><td><?= e($info['commit'] ?? '—') ?></td></tr>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Remote</td><td><code><?= e($info['remote'] ?? '—') ?></code></td></tr>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Позаду origin</td><td><?= (int) ($info['behind'] ?? 0) ?> комітів</td></tr>
+    <?php $authStatus = $auth_status ?? null; if ($authStatus): ?>
+    <tr><td style="padding:.3rem 0;color:#94a3b8">Автентифікація</td><td>
+      <?= e($authStatus['label']) ?>
+      <?php if (!$authStatus['configured']): ?>
+      <span style="color:#9f1239;font-size:.82rem">— <?= e($authStatus['warning']) ?> Див. «🔑 Налаштування» нижче.</span>
+      <?php endif; ?>
+    </td></tr>
+    <?php endif; ?>
   </table>
   <form method="post" action="/admin/gitdeploy/pull" style="display:inline">
     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
@@ -248,7 +256,7 @@ echo "Готово\n";</pre>
 </section>
 
 <?php $curAuth = $settings['gitdeploy_auth_type'] ?? 'none'; ?>
-<details class="jura-card" style="margin-bottom:1rem" <?= ($curAuth === 'none' || !empty($flash_ssh_key)) ? 'open' : '' ?>>
+<details class="jura-card" style="margin-bottom:1rem" <?= ($curAuth === 'none' || !empty($flash_ssh_key) || !($authStatus['configured'] ?? true)) ? 'open' : '' ?>>
   <summary style="cursor:pointer;font-weight:700">🔑 Налаштування: підключення та автор комітів</summary>
   <div class="jura-alert" style="margin-top:1rem">
     Один спільний блок — раніше "Налаштування" (ім'я/email) і зміна автентифікації були двома окремими формами, і збереження одної не чіпало іншу, через що легко було "зберегти" тільки ім'я/email і не помітити, що спосіб автентифікації лишився старим. Тепер усе зберігається однією кнопкою. Змінювати тут адресу/автентифікацію безпечно — файли сайту не чіпаються. Якщо <strong>git pull</strong> падає з помилкою <code>could not read Username for 'https://github.com'</code> — це означає, що нижче обрано «Без автентифікації» для приватного репозиторію.
@@ -284,6 +292,8 @@ echo "Готово\n";</pre>
       </div>
       <?php if ($curAuth === 'none'): ?>
       <p style="color:#9f1239;font-size:.82rem;margin:.5rem 0 0">Зараз обрано «Без автентифікації» — якщо репозиторій приватний, git pull/push будуть падати з <code>could not read Username</code>.</p>
+      <?php elseif (!($authStatus['configured'] ?? true)): ?>
+      <p style="color:#9f1239;font-size:.82rem;margin:.5rem 0 0"><?= e($authStatus['warning'] ?? '') ?> Вкажіть токен або SSH-ключ нижче і натисніть «Зберегти».</p>
       <?php endif; ?>
     </div>
     <div id="gd-auth-token-reconnect" style="display:<?= $curAuth === 'https_token' ? 'block' : 'none' ?>;margin-top:.75rem">

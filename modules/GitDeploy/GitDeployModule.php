@@ -88,6 +88,33 @@ function git_deploy_ssh_key_path(): string
     return git_deploy_storage_dir() . '/deploy_key';
 }
 
+// The "Стан підключення" summary previously showed branch/commit/remote/behind
+// but never the configured auth type -- so a repo stuck on "none" (or on
+// "https_token"/"ssh_key" with no credential actually saved, e.g. a blank
+// token) looked identical to a correctly-configured one, and the only way to
+// notice was to open the collapsed settings panel further down the page and
+// read the radio buttons. This makes that state visible at a glance, and lets
+// the page auto-expand the settings panel whenever it looks broken.
+function git_deploy_auth_status(PDO $pdo): array
+{
+    $settings = git_deploy_settings($pdo);
+    $type = (string) $settings['gitdeploy_auth_type'];
+    $labels = ['none' => 'Без автентифікації', 'https_token' => 'HTTPS-токен', 'ssh_key' => 'SSH-ключ'];
+    $label = $labels[$type] ?? $type;
+
+    $configured = true;
+    $warning = null;
+    if ($type === 'https_token' && trim((string) $settings['gitdeploy_git_token']) === '') {
+        $configured = false;
+        $warning = 'Обрано «HTTPS-токен», але сам токен не збережено.';
+    } elseif ($type === 'ssh_key' && !is_file(git_deploy_ssh_key_path())) {
+        $configured = false;
+        $warning = 'Обрано «SSH-ключ», але ключ не знайдено на сервері.';
+    }
+
+    return ['type' => $type, 'label' => $label, 'configured' => $configured, 'warning' => $warning];
+}
+
 function git_deploy_known_hosts_path(): string
 {
     return git_deploy_storage_dir() . '/known_hosts';
