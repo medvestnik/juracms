@@ -12,10 +12,13 @@ $metaDescription = $meta_description ?? '';
 // Uses the current view's translation map when available (so it links to
 // the actual translated page/post), falling back to that locale's home
 // page for views that don't carry $translations (e.g. 404, module pages).
+// Labels are short codes (RU/UA/EN), not native_name/flags -- uk's
+// conventional short label is "UA", not its ISO code "uk".
+$localeShortLabels = ['uk' => 'UA', 'ru' => 'RU', 'en' => 'EN'];
 $siteLocales = [];
 if (isset($pdo)) {
     try {
-        $localeRows = $pdo->query('SELECT code,native_name FROM ' . jura_table('locales') . ' WHERE is_active=1 ORDER BY sort_order,id')->fetchAll();
+        $localeRows = $pdo->query('SELECT code FROM ' . jura_table('locales') . ' WHERE is_active=1 ORDER BY sort_order,id')->fetchAll();
     } catch (\Throwable) {
         $localeRows = [];
     }
@@ -25,7 +28,7 @@ if (isset($pdo)) {
         foreach ($localeRows as $lr) {
             $code = (string) $lr['code'];
             $url = $translationMap[$code]['route_path'] ?? ($code === $defaultLocaleCode ? '/' : '/' . $code);
-            $siteLocales[] = ['code' => $code, 'label' => (string) $lr['native_name'], 'url' => $url, 'current' => $code === $currentLocaleCode];
+            $siteLocales[] = ['code' => $code, 'label' => $localeShortLabels[$code] ?? strtoupper($code), 'url' => $url, 'current' => $code === $currentLocaleCode];
         }
     }
 }
@@ -75,15 +78,15 @@ if (isset($pdo)) {
       <?php endif; ?>
       <div class="site-header__right">
         <?php if (!empty($siteLocales)): ?>
-        <div class="lang-switcher" style="position:relative">
-          <button type="button" class="lang-switcher__btn" id="lang-switcher-btn" style="background:none;border:1px solid var(--site-border,#e2e8f0);border-radius:6px;padding:.35rem .6rem;font-size:.85rem;cursor:pointer;text-transform:uppercase" aria-label="Мова">
-            <?= e($currentLocaleCode) ?> ▾
-          </button>
-          <div id="lang-switcher-drop" hidden style="position:absolute;right:0;top:calc(100% + 4px);background:var(--site-surface,#fff);border:1px solid var(--site-border,#e2e8f0);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.1);min-width:140px;z-index:200;padding:4px">
-            <?php foreach ($siteLocales as $sl): ?>
-            <a href="<?= e($sl['url']) ?>" style="display:block;padding:6px 10px;border-radius:6px;font-size:.85rem;text-decoration:none;color:inherit<?= $sl['current'] ? ';font-weight:700' : '' ?>"><?= e($sl['label']) ?></a>
-            <?php endforeach; ?>
-          </div>
+        <div class="lang-switcher" style="display:flex;align-items:center;gap:.15rem" aria-label="Мова">
+          <?php foreach ($siteLocales as $i => $sl): ?>
+          <?php if ($i > 0): ?><span style="color:var(--site-border,#e2e8f0)" aria-hidden="true">/</span><?php endif; ?>
+          <?php if ($sl['current']): ?>
+          <span class="lang-switcher__item is-active" style="padding:.3rem .4rem;font-size:.8rem;font-weight:700" aria-current="true"><?= e($sl['label']) ?></span>
+          <?php else: ?>
+          <a href="<?= e($sl['url']) ?>" class="lang-switcher__item" style="padding:.3rem .4rem;font-size:.8rem;font-weight:500;text-decoration:none;color:var(--site-text-muted,#64748b)"><?= e($sl['label']) ?></a>
+          <?php endif; ?>
+          <?php endforeach; ?>
         </div>
         <?php endif; ?>
         <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Перемкнути тему">
@@ -134,13 +137,6 @@ if (isset($pdo)) {
     var open = nav.classList.toggle('is-open');
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
-})();
-(function(){
-  var btn = document.getElementById('lang-switcher-btn');
-  var drop = document.getElementById('lang-switcher-drop');
-  if (!btn || !drop) return;
-  btn.addEventListener('click', function(e){ e.stopPropagation(); drop.hidden = !drop.hidden; });
-  document.addEventListener('click', function(){ drop.hidden = true; });
 })();
 (function(){
   var btn = document.getElementById('theme-toggle');

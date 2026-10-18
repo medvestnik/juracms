@@ -34,6 +34,7 @@ function git_deploy_handle_admin(string $path, string $method, PDO $pdo, callabl
             'is_repo' => $isRepo,
             'settings' => git_deploy_settings($pdo),
             'info' => $isRepo ? git_deploy_get_info($pdo) : null,
+            'auth_status' => $isRepo ? git_deploy_auth_status($pdo) : null,
             'status' => $isRepo ? git_deploy_get_status($pdo) : [],
             'logs' => git_deploy_get_logs($pdo, $logsPerPage, ($logsPage - 1) * $logsPerPage),
             'logs_total' => $logsTotal,

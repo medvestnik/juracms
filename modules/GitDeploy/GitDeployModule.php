@@ -88,6 +88,33 @@ function git_deploy_ssh_key_path(): string
     return git_deploy_storage_dir() . '/deploy_key';
 }
 
+// The "Стан підключення" summary previously showed branch/commit/remote/behind
+// but never the configured auth type -- so a repo stuck on "none" (or on
+// "https_token"/"ssh_key" with no credential actually saved, e.g. a blank
+// token) looked identical to a correctly-configured one, and the only way to
+// notice was to open the collapsed settings panel further down the page and
+// read the radio buttons. This makes that state visible at a glance, and lets
+// the page auto-expand the settings panel whenever it looks broken.
+function git_deploy_auth_status(PDO $pdo): array
+{
+    $settings = git_deploy_settings($pdo);
+    $type = (string) $settings['gitdeploy_auth_type'];
+    $labels = ['none' => 'Без автентифікації', 'https_token' => 'HTTPS-токен', 'ssh_key' => 'SSH-ключ'];
+    $label = $labels[$type] ?? $type;
+
+    $configured = true;
+    $warning = null;
+    if ($type === 'https_token' && trim((string) $settings['gitdeploy_git_token']) === '') {
+        $configured = false;
+        $warning = 'Обрано «HTTPS-токен», але сам токен не збережено.';
+    } elseif ($type === 'ssh_key' && !is_file(git_deploy_ssh_key_path())) {
+        $configured = false;
+        $warning = 'Обрано «SSH-ключ», але ключ не знайдено на сервері.';
+    }
+
+    return ['type' => $type, 'label' => $label, 'configured' => $configured, 'warning' => $warning];
+}
+
 function git_deploy_known_hosts_path(): string
 {
     return git_deploy_storage_dir() . '/known_hosts';
@@ -218,9 +245,44 @@ function git_deploy_get_info(PDO $pdo, bool $forceFetch = false): array
 }
 
 // ── Pull ─────────────────────────────────────────────────────────────────
+
+/**
+ * Called only when a merge conflict is limited to exactly the VERSION file.
+ * Reads both sides' content from the conflicted index (stage 2 = ours,
+ * stage 3 = theirs), and if both look like a plain dotted version string
+ * (e.g. "1.0.11"), keeps the higher one, writes it, and completes the merge
+ * commit. Returns a short description of what it did on success, or null if
+ * anything looks unexpected -- the caller then falls back to the normal
+ * abort-and-ask-for-manual-resolution path rather than guessing.
+ */
+function git_deploy_resolve_version_conflict(PDO $pdo, string $git): ?string
+{
+    $ours = trim(safe_shell_exec($git . ' show :2:VERSION 2>&1'));
+    $theirs = trim(safe_shell_exec($git . ' show :3:VERSION 2>&1'));
+    $versionPattern = '/^\d+(\.\d+)*$/';
+    if (!preg_match($versionPattern, $ours) || !preg_match($versionPattern, $theirs)) {
+        return null;
+    }
+
+    $chosen = version_compare($ours, $theirs, '>=') ? $ours : $theirs;
+    $path = git_deploy_repo_dir($pdo) . '/VERSION';
+    if (@file_put_contents($path, $chosen . "\n") === false) {
+        return null;
+    }
+
+    safe_shell_exec($git . ' add VERSION 2>&1');
+    $commitOut = trim(safe_shell_exec($git . ' commit --no-edit 2>&1'));
+    if ($commitOut === '' || str_contains($commitOut, 'fatal') || str_contains($commitOut, 'error')) {
+        return null;
+    }
+
+    return "Локальна версія: {$ours}, у репозиторії: {$theirs} — обрано {$chosen}.\n{$commitOut}";
+}
+
 function git_deploy_pull(PDO $pdo): array
 {
     $git = git_deploy_cmd($pdo);
+    $remoteFix = git_deploy_ensure_remote_matches_auth($pdo, $git);
     $headBefore = trim(safe_shell_exec($git . ' rev-parse HEAD 2>&1'));
 
     $branch = trim(safe_shell_exec($git . ' symbolic-ref --short HEAD 2>&1'));
@@ -234,8 +296,30 @@ function git_deploy_pull(PDO $pdo): array
         $output = safe_shell_exec($git . ' pull origin ' . escapeshellarg($branch) . ' --no-rebase --allow-unrelated-histories 2>&1');
     }
 
+    if ($remoteFix !== null) {
+        $output = "=== Виправлено адресу репозиторію ===\n{$remoteFix}\n\n{$output}";
+    }
+
     $hasConflict = str_contains($output, 'CONFLICT') || str_contains($output, 'Automatic merge failed');
-    $success = !$hasConflict && !str_contains($output, 'error') && !str_contains($output, 'fatal');
+
+    // VERSION is a single version-string line, and in practice the single
+    // most common conflict this module hits: this site's own update history
+    // and the generic repo's release process can each bump it independently,
+    // and a plain git merge can't reconcile two different values on the same
+    // line on its own. When the conflict is limited to just that file, it's
+    // low-risk enough to resolve automatically (keep whichever side has the
+    // higher version) instead of aborting and asking for SSH/a terminal,
+    // which most sites running this module don't have.
+    if ($hasConflict) {
+        $unmergedFiles = array_values(array_filter(array_map('trim', explode("\n", safe_shell_exec($git . ' diff --name-only --diff-filter=U 2>&1')))));
+        if ($unmergedFiles === ['VERSION']) {
+            $resolution = git_deploy_resolve_version_conflict($pdo, $git);
+            if ($resolution !== null) {
+                $hasConflict = false;
+                $output .= "\n\n=== Авто-вирішення конфлікту у VERSION ===\n{$resolution}";
+            }
+        }
+    }
 
     // A conflicted merge leaves conflict markers (<<<<<<< HEAD / ======= /
     // >>>>>>>) written directly into whatever files collided -- if one of
@@ -249,6 +333,8 @@ function git_deploy_pull(PDO $pdo): array
         $abortOutput = trim(safe_shell_exec($git . ' merge --abort 2>&1'));
         $output .= "\n\n=== git merge --abort (автоматично, щоб не лишати сайт з конфліктами у файлах) ===\n" . ($abortOutput !== '' ? $abortOutput : 'виконано');
     }
+
+    $success = !$hasConflict && !str_contains($output, 'error') && !str_contains($output, 'fatal');
 
     $changedFiles = '';
     if ($success) {
@@ -397,10 +483,14 @@ function git_deploy_commit_and_push(PDO $pdo, array $files, string $message): ar
     }
 
     $branch = trim(safe_shell_exec($git . ' rev-parse --abbrev-ref HEAD 2>&1'));
+    $remoteFix = git_deploy_ensure_remote_matches_auth($pdo, $git);
     $pushOut = trim(safe_shell_exec($git . ' push origin ' . escapeshellarg($branch) . ' 2>&1'));
     $success = !str_contains($pushOut, 'error') && !str_contains($pushOut, 'fatal');
 
     $fullOut = "=== git commit ===\n{$commitOut}\n\n=== git push origin {$branch} ===\n{$pushOut}";
+    if ($remoteFix !== null) {
+        $fullOut = "=== Виправлено адресу репозиторію ===\n{$remoteFix}\n\n{$fullOut}";
+    }
     git_deploy_write_log($pdo, 'push', $message, $success, $fullOut, implode("\n", $files));
 
     if ($success) {
@@ -474,6 +564,37 @@ function git_deploy_normalize_remote_for_auth(string $remoteUrl, string $authTyp
         return [$converted, "Адресу репозиторію автоматично переведено на HTTPS-формат: {$remoteUrl} → {$converted}"];
     }
     return [$remoteUrl, null];
+}
+
+// git_deploy_normalize_remote_for_auth() above only ever ran from the
+// "Підключити" form -- which is hidden the moment a repo is already
+// connected (see views/main.php's "if (!$isRepo)" guard). So a remote
+// that drifted out of sync with the saved auth type (predates this fix,
+// or the auth type got changed some other way) could never self-correct
+// again through the UI -- pull/push would just fail the same transport
+// error forever, even though git_deploy_commit_and_push()'s own error
+// message points at "settings below" that don't exist for an already-
+// connected repo. Call this at the top of pull/push instead: it re-checks
+// the actual remote on every operation and fixes it transparently,
+// exactly like the init form would have, with no UI needed.
+function git_deploy_ensure_remote_matches_auth(PDO $pdo, string $git): ?string
+{
+    $authType = (string) git_deploy_settings($pdo)['gitdeploy_auth_type'];
+    // `git config --get`, not `remote get-url`: the latter resolves any
+    // url.<base>.insteadOf rewrite rules before returning a value, which
+    // would mask the literally-stored scheme this check needs to compare
+    // against auth_type (and could undo a host's own legitimate insteadOf
+    // setup by "fixing" what it resolves to, not what's actually saved).
+    $current = trim(safe_shell_exec($git . ' config --get remote.origin.url 2>&1'));
+    if ($current === '' || str_contains($current, 'fatal') || str_contains($current, 'No such')) {
+        return null;
+    }
+    [$normalized, $log] = git_deploy_normalize_remote_for_auth($current, $authType);
+    if ($log === null || $normalized === $current) {
+        return null;
+    }
+    safe_shell_exec($git . ' remote set-url origin ' . escapeshellarg($normalized) . ' 2>&1');
+    return $log;
 }
 
 function git_deploy_init_repo(PDO $pdo, array $data): array
@@ -577,7 +698,12 @@ function git_deploy_write_default_gitignore(PDO $pdo): string
     $existing = is_file($path) ? (string) file_get_contents($path) : '';
     $existingLines = $existing !== '' ? preg_split('/\r\n|\r|\n/', $existing) : [];
 
-    $defaults = ['/config.php', '/storage/', '/uploads/', '/cache/', '/logs/', '*.log', '.DS_Store', 'Thumbs.db'];
+    // /.github/ -- the generic CMS repo's own CI workflows (e.g. its
+    // auto-release version bump) land on disk via Updater::runAutomaticUpdate()
+    // and have no business being committed into a deployed site's own repo;
+    // committing one back in reintroduces an auto-commit race against this
+    // same push flow (see git_deploy_commit_and_push()'s non-fast-forward handling).
+    $defaults = ['/config.php', '/storage/', '/uploads/', '/cache/', '/logs/', '*.log', '.DS_Store', 'Thumbs.db', '/.github/'];
     $toAdd = array_values(array_diff($defaults, $existingLines));
     if (!$toAdd) {
         return '.gitignore: типові виключення вже присутні.';

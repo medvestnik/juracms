@@ -7,11 +7,14 @@ $perPageOpts = $per_page_opts ?? [20,25,30,50,100,200];
 $curPage     = $cur_page ?? 1;
 $totalPages  = $total_pages ?? 1;
 $total       = $total ?? 0;
+$locale      = $locale ?? '';
+$q           = $q ?? '';
+$allLocales  = $all_locales ?? [];
 
-$sortMap = ['date'=>'За датою','title'=>'За назвою','id'=>'За ID','order'=>'Вручну'];
+$sortMap = ['date'=>'За датою','title'=>'За назвою','id'=>'За ID','order'=>'Вручну','locale'=>'За мовою'];
 
 // Build a query string with specific overrides
-$qBase = ['sort'=>$sort,'dir'=>strtolower($dir),'per_page'=>$perPage,'page'=>$curPage];
+$qBase = ['sort'=>$sort,'dir'=>strtolower($dir),'per_page'=>$perPage,'page'=>$curPage,'locale'=>$locale,'q'=>$q];
 $urlWith = function(array $overrides) use ($qBase): string {
     return '?' . http_build_query(array_merge($qBase, $overrides));
 };
@@ -23,15 +26,21 @@ $sortIcon = function(string $col) use ($sort, $dir): string {
     if ($sort !== $col) return '<span style="color:#cbd5e1">↕</span>';
     return $dir === 'ASC' ? '↑' : '↓';
 };
-$pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
-    return '?sort='.$sort.'&dir='.strtolower($dir).'&per_page='.$perPage.'&page='.$pg;
+$pageUrl = function(int $pg) use ($qBase): string {
+    return '?' . http_build_query(array_merge($qBase, ['page'=>$pg]));
+};
+$localeLabel = function(string $code) use ($allLocales): string {
+    foreach ($allLocales as $l) {
+        if ($l['code'] === $code) return $l['native_name'] . ' (' . $code . ')';
+    }
+    return $code ?: '—';
 };
 ?>
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
   <a href="/admin/posts/create" class="jura-btn jura-btn-primary">+ Додати публікацію</a>
   <div style="display:flex;align-items:center;gap:.4rem;font-size:.83rem;color:#64748b;margin-left:.5rem">
     Сортування:
-    <?php foreach (['date'=>'За датою','title'=>'За назвою','id'=>'За ID','order'=>'Вручну'] as $col => $label): ?>
+    <?php foreach ($sortMap as $col => $label): ?>
     <a href="<?= $urlWith(['sort'=>$col,'dir'=>$sortDirFor($col),'page'=>1]) ?>"
        class="jura-btn jura-btn-secondary"
        style="padding:.25rem .55rem;font-size:.8rem<?= $sort===$col ? ';font-weight:700'.($col==='order'?';background:#fffbeb;border-color:#fbbf24':'') : '' ?>"
@@ -40,9 +49,29 @@ $pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
     </a>
     <?php endforeach; ?>
   </div>
-  <form method="get" style="display:flex;align-items:center;gap:.35rem;font-size:.83rem;margin-left:auto">
+  <form method="get" style="display:flex;align-items:center;gap:.5rem;font-size:.83rem;margin-left:auto;flex-wrap:wrap">
     <input type="hidden" name="sort" value="<?= e($sort) ?>">
     <input type="hidden" name="dir" value="<?= e(strtolower($dir)) ?>">
+    <input type="hidden" name="per_page" value="<?= e((string) $perPage) ?>">
+    <input class="jura-input" type="search" name="q" value="<?= e($q) ?>" placeholder="Пошук за назвою…" style="padding:.3rem .5rem;font-size:.83rem;width:200px;margin:0">
+    <?php if (!empty($allLocales)): ?>
+    <select name="locale" class="jura-input" style="padding:.3rem .5rem;font-size:.83rem;width:auto;margin:0">
+      <option value="">Усі мови</option>
+      <?php foreach ($allLocales as $l): ?>
+      <option value="<?= e($l['code']) ?>" <?= $locale===$l['code'] ? 'selected' : '' ?>><?= e($l['native_name']) ?> (<?= e($l['code']) ?>)</option>
+      <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
+    <button class="jura-btn jura-btn-secondary" type="submit" style="padding:.3rem .65rem;font-size:.83rem">Знайти</button>
+    <?php if ($locale !== '' || $q !== ''): ?>
+    <a class="jura-btn" href="<?= $urlWith(['locale'=>'','q'=>'','page'=>1]) ?>" style="padding:.3rem .65rem;font-size:.83rem;color:#64748b">✕ Скинути</a>
+    <?php endif; ?>
+  </form>
+  <form method="get" style="display:flex;align-items:center;gap:.35rem;font-size:.83rem">
+    <input type="hidden" name="sort" value="<?= e($sort) ?>">
+    <input type="hidden" name="dir" value="<?= e(strtolower($dir)) ?>">
+    <input type="hidden" name="locale" value="<?= e($locale) ?>">
+    <input type="hidden" name="q" value="<?= e($q) ?>">
     <input type="hidden" name="page" value="1">
     <label style="color:#64748b">Записів:</label>
     <select name="per_page" class="jura-input" style="padding:.2rem .4rem;font-size:.83rem;width:auto" onchange="this.form.submit()">
@@ -64,6 +93,7 @@ $pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
         <th style="width:44px">ID</th>
         <th>Назва</th>
         <th>Категорія</th>
+        <th>Мова</th>
         <th>Статус</th>
         <th>Опубліковано</th>
         <th style="text-align:center">Дії</th>
@@ -78,6 +108,7 @@ $pageUrl = function(int $pg) use ($sort, $dir, $perPage): string {
         <td style="color:#94a3b8;font-size:.8rem"><?= (int)$p['id'] ?></td>
         <td><?= e($p['title']) ?></td>
         <td style="font-size:.82rem;color:#64748b"><?= e($p['category_title'] ?? '—') ?></td>
+        <td style="font-size:.78rem"><span style="display:inline-block;padding:.1rem .45rem;border-radius:999px;background:#eef2ff;color:#4338ca;font-weight:600"><?= e($localeLabel((string) ($p['locale'] ?? ''))) ?></span></td>
         <td>
           <form method="post" action="/admin/posts/<?= (int)$p['id'] ?>/toggle" style="margin:0;display:inline">
             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
