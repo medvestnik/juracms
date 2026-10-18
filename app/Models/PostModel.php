@@ -9,15 +9,41 @@ use PDO;
 /** Reads/writes jura_posts and its category relation table. */
 final class PostModel
 {
-    public static function count(PDO $pdo): int
+    public static function count(PDO $pdo, string $locale = '', string $search = ''): int
     {
-        return (int) $pdo->query('SELECT COUNT(*) FROM ' . jura_table('posts'))->fetchColumn();
+        [$where, $params] = self::filterClause($locale, $search);
+        $stmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " p {$where}");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
     }
 
-    public static function paginate(PDO $pdo, string $orderCol, string $dir, int $perPage, int $offset): array
+    public static function paginate(PDO $pdo, string $orderCol, string $dir, int $perPage, int $offset, string $locale = '', string $search = ''): array
     {
-        $query = "SELECT p.*,c.title category_title FROM " . jura_table('posts') . " p LEFT JOIN " . jura_table('post_category_relations') . " r ON r.post_id=p.id LEFT JOIN " . jura_table('post_categories') . " c ON c.id=r.category_id ORDER BY {$orderCol} {$dir}, p.id DESC LIMIT {$perPage} OFFSET {$offset}";
-        return $pdo->query($query)->fetchAll();
+        [$where, $params] = self::filterClause($locale, $search);
+        $stmt = $pdo->prepare(
+            "SELECT p.*,c.title category_title FROM " . jura_table('posts') . " p "
+            . "LEFT JOIN " . jura_table('post_category_relations') . " r ON r.post_id=p.id "
+            . "LEFT JOIN " . jura_table('post_categories') . " c ON c.id=r.category_id "
+            . "{$where} ORDER BY {$orderCol} {$dir}, p.id DESC LIMIT {$perPage} OFFSET {$offset}"
+        );
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /** [WHERE clause, bound params] for the admin list's language filter + title search. */
+    private static function filterClause(string $locale, string $search): array
+    {
+        $clauses = [];
+        $params = [];
+        if ($locale !== '') {
+            $clauses[] = 'p.locale=:locale';
+            $params['locale'] = $locale;
+        }
+        if ($search !== '') {
+            $clauses[] = 'p.title LIKE :search';
+            $params['search'] = '%' . $search . '%';
+        }
+        return [$clauses ? 'WHERE ' . implode(' AND ', $clauses) : '', $params];
     }
 
     public static function reorder(PDO $pdo, array $ids): void

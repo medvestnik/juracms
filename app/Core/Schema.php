@@ -15,7 +15,7 @@ use PDO;
  */
 final class Schema
 {
-    public const VERSION = '7';
+    public const VERSION = '8';
 
     public static function ensure(PDO $pdo): void
     {
@@ -80,6 +80,8 @@ final class Schema
             ['pages', 'translation_of', 'INT UNSIGNED NULL'],
             ['posts', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
             ['posts', 'translation_of', 'INT UNSIGNED NULL'],
+            ['post_categories', 'locale', "VARCHAR(16) NOT NULL DEFAULT ''"],
+            ['post_categories', 'translation_of', 'INT UNSIGNED NULL'],
             // Empty locale = shown for every locale (matches pages/posts/hotel
             // tables' fallback), so existing menu items keep showing up on every
             // language without an admin having to tag them.
@@ -152,6 +154,7 @@ final class Schema
         // rendering exactly as before until an admin adds real translations.
         $pdo->prepare('UPDATE ' . jura_table('pages') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
         $pdo->prepare('UPDATE ' . jura_table('posts') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
+        $pdo->prepare('UPDATE ' . jura_table('post_categories') . " SET locale=? WHERE locale=''")->execute([$defaultLocale]);
 
         // Any admin user works as the author here -- this just needs to exist,
         // not belong to anyone in particular.

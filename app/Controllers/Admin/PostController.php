@@ -25,18 +25,20 @@ final class PostController
 
     public static function index(PDO $pdo): never
     {
-        $sortMap = ['date' => 'p.published_at', 'title' => 'p.title', 'id' => 'p.id', 'order' => 'p.sort_order'];
+        $sortMap = ['date' => 'p.published_at', 'title' => 'p.title', 'id' => 'p.id', 'order' => 'p.sort_order', 'locale' => 'p.locale'];
         $sort = array_key_exists($_GET['sort'] ?? '', $sortMap) ? $_GET['sort'] : 'date';
         $dir = ($sort === 'order') ? 'ASC' : ((($_GET['dir'] ?? '') === 'asc') ? 'ASC' : 'DESC');
         $perPageOpts = [20, 25, 30, 50, 100, 200];
         $perPage = in_array((int) ($_GET['per_page'] ?? 20), $perPageOpts) ? (int) ($_GET['per_page'] ?? 20) : 20;
-        $total = PostModel::count($pdo);
+        $locale = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($_GET['locale'] ?? '')));
+        $search = trim((string) ($_GET['q'] ?? ''));
+        $total = PostModel::count($pdo, $locale, $search);
         $totalPages = max(1, (int) ceil($total / $perPage));
         $curPage = max(1, min($totalPages, (int) ($_GET['page'] ?? 1)));
         $offset = ($curPage - 1) * $perPage;
         view_admin('posts', [
             'title' => 'Публікації',
-            'posts' => PostModel::paginate($pdo, $sortMap[$sort], $dir, $perPage, $offset),
+            'posts' => PostModel::paginate($pdo, $sortMap[$sort], $dir, $perPage, $offset, $locale, $search),
             'sort' => $sort,
             'dir' => $dir,
             'per_page' => $perPage,
@@ -44,6 +46,9 @@ final class PostController
             'cur_page' => $curPage,
             'total_pages' => $totalPages,
             'total' => $total,
+            'locale' => $locale,
+            'q' => $search,
+            'all_locales' => jura_available_locales($pdo),
         ]);
         exit;
     }
@@ -70,7 +75,8 @@ final class PostController
             PostModel::addCategory($pdo, $newPostId, (int) ($_POST['category_id'] ?? 0));
             redirect(isset($_POST['_close']) ? '/admin/posts' : '/admin/posts/' . $newPostId . '/edit');
         }
-        view_admin('post-edit', ['title' => 'Нова публікація', 'post' => [], 'categories' => CategoryModel::options($pdo)]);
+        [, $defaultLocale] = LocaleModel::active($pdo);
+        view_admin('post-edit', ['title' => 'Нова публікація', 'post' => [], 'categories' => CategoryModel::options($pdo, $defaultLocale)]);
         exit;
     }
 
@@ -125,7 +131,7 @@ final class PostController
         view_admin('post-edit', [
             'title' => 'Редагувати публікацію',
             'post' => $post,
-            'categories' => CategoryModel::options($pdo),
+            'categories' => CategoryModel::options($pdo, (string) ($post['locale'] ?? '')),
             'translations' => $post ? RouteModel::entityTranslations($pdo, 'posts', $post) : [],
             'all_locales' => $post ? jura_available_locales($pdo) : [],
         ]);
