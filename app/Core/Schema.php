@@ -15,7 +15,7 @@ use PDO;
  */
 final class Schema
 {
-    public const VERSION = '8';
+    public const VERSION = '9';
 
     public static function ensure(PDO $pdo): void
     {
@@ -103,6 +103,28 @@ final class Schema
                 }
             }
         }
+        // A translate-button click is a plain SELECT-then-INSERT with no DB-level
+        // guard, so a double click (or two requests racing before either one's
+        // redirect lands) could create two rows for the same (translation_of,
+        // locale) pair -- this happened on a live site once there were enough
+        // locales for the same translate action to appear on more than one row.
+        // Before locking that down with a unique index, collapse any duplicates
+        // that already exist: keep the oldest row per pair, move its post
+        // relations onto it, and drop the rest.
+        self::dedupeCategoryTranslations($pdo);
+        $categoriesTable = str_replace('`', '', jura_table('post_categories'));
+        $catIndex = $pdo->query("SHOW INDEX FROM `{$categoriesTable}` WHERE Key_name=" . $pdo->quote('uq_cat_translation_locale'));
+        if (!$catIndex->fetch()) {
+            try {
+                $pdo->exec("ALTER TABLE `{$categoriesTable}` ADD UNIQUE INDEX `uq_cat_translation_locale` (`translation_of`,`locale`)");
+            } catch (\PDOException $e) {
+                // 42000/1061 = index already added by a concurrent request;
+                // 23000/1062 = dedupe above didn't fully cover some edge case
+                // (e.g. ran on a replica mid-write) -- either way, not worth
+                // failing the whole request over on a self-healing check.
+            }
+        }
+
         $defaults = [
             ['site_name', 'Jura CMS', 'system'],
             ['site_url', '', 'system'],
@@ -169,5 +191,42 @@ final class Schema
         }
         @file_put_contents($marker, self::VERSION);
         $ensuredThisRequest = true;
+    }
+
+    /** For every (translation_of,locale) pair with more than one row, keeps
+     * the oldest (lowest id), repoints its post_category_relations onto it,
+     * and deletes the rest. Safe to run repeatedly -- a no-op once there are
+     * no duplicates left. */
+    private static function dedupeCategoryTranslations(PDO $pdo): void
+    {
+        $categories = jura_table('post_categories');
+        $relations = jura_table('post_category_relations');
+        $dupeGroups = "(SELECT translation_of,locale,MIN(id) keep_id FROM {$categories} "
+            . "WHERE translation_of IS NOT NULL GROUP BY translation_of,locale HAVING COUNT(*)>1)";
+        try {
+            // Move relations off the duplicate rows onto the row being kept;
+            // IGNORE skips any that would collide with a relation the kept row
+            // already has for that post (composite primary key post_id+category_id).
+            $pdo->exec(
+                "UPDATE IGNORE {$relations} rel "
+                . "INNER JOIN {$categories} dup ON dup.id=rel.category_id AND dup.translation_of IS NOT NULL "
+                . "INNER JOIN {$dupeGroups} keep ON keep.translation_of=dup.translation_of AND keep.locale=dup.locale AND dup.id<>keep.keep_id "
+                . "SET rel.category_id=keep.keep_id"
+            );
+            // Anything UPDATE IGNORE above couldn't move (because the kept row
+            // already had that relation) is now a redundant leftover -- drop it.
+            $pdo->exec(
+                "DELETE rel FROM {$relations} rel "
+                . "INNER JOIN {$categories} dup ON dup.id=rel.category_id AND dup.translation_of IS NOT NULL "
+                . "INNER JOIN {$dupeGroups} keep ON keep.translation_of=dup.translation_of AND keep.locale=dup.locale AND dup.id<>keep.keep_id"
+            );
+            $pdo->exec(
+                "DELETE dup FROM {$categories} dup "
+                . "INNER JOIN {$dupeGroups} keep ON keep.translation_of=dup.translation_of AND keep.locale=dup.locale AND dup.id<>keep.keep_id"
+            );
+        } catch (\Throwable) {
+            // Never let a cleanup pass take the admin panel down; worst case
+            // the unique index add just below gets skipped until it's retried.
+        }
     }
 }

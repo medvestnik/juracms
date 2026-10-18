@@ -23,7 +23,19 @@ final class CategoryController
                 if ($source && $locale !== '') {
                     $rootId = (int) ($source['translation_of'] ?: $source['id']);
                     if (!CategoryModel::findTranslationId($pdo, $rootId, $locale)) {
-                        CategoryModel::createTranslation($pdo, $source, $locale, $rootId);
+                        try {
+                            CategoryModel::createTranslation($pdo, $source, $locale, $rootId);
+                        } catch (\PDOException $e) {
+                            // Two translate clicks racing each other (e.g. the
+                            // same "+locale" action was visible on more than one
+                            // row) both pass the check above before either
+                            // commits; the loser hits the unique index on
+                            // (translation_of,locale) instead of creating a
+                            // duplicate. That's exactly what it's there for.
+                            if ($e->getCode() !== '23000') {
+                                throw $e;
+                            }
+                        }
                     }
                 }
             } else {

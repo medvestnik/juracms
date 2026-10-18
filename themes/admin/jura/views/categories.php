@@ -67,19 +67,28 @@ foreach ($categories as $c) {
       <td><input form="cat-<?= (int) $c['id'] ?>" class="jura-input" name="description" value="<?= e($c['description'] ?? '') ?>" style="width:200px;margin:0"></td>
       <td style="font-size:.82rem">
         <span style="display:inline-block;padding:.15rem .5rem;border-radius:999px;background:#eef2ff;color:#4338ca;font-weight:600"><?= e($c['locale'] ?: '—') ?></span>
-        <?php if (!empty($allLocales)): ?>
-        <div style="display:flex;gap:.25rem;flex-wrap:wrap;margin-top:.35rem">
-          <?php foreach ($allLocales as $l): $code = $l['code']; if (isset($byRoot[$rootId][$code])) continue; ?>
-          <form method="post" style="margin:0">
-            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-            <input type="hidden" name="action" value="translate">
-            <input type="hidden" name="id" value="<?= $rootId ?>">
-            <input type="hidden" name="locale" value="<?= e($code) ?>">
-            <button class="jura-btn" type="submit" title="Створити переклад (<?= e($code) ?>)"
-              style="padding:.1rem .4rem;font-size:.72rem;background:#f8fafc;color:#475569;border:1px dashed #cbd5e1">+<?= e($code) ?></button>
-          </form>
-          <?php endforeach; ?>
-        </div>
+        <?php if (empty($c['translation_of'])): ?>
+          <?php if (!empty($allLocales)): ?>
+          <!-- Only the root row offers "+locale" buttons -- with a translate
+               button on every sibling row too, the same action was reachable
+               from several places at once and double-clicking across rows
+               created duplicate translations. One place, one button each. -->
+          <div style="display:flex;gap:.25rem;flex-wrap:wrap;margin-top:.35rem">
+            <?php foreach ($allLocales as $l): $code = $l['code']; if (isset($byRoot[$rootId][$code])) continue; ?>
+            <form method="post" style="margin:0">
+              <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+              <input type="hidden" name="action" value="translate">
+              <input type="hidden" name="id" value="<?= $rootId ?>">
+              <input type="hidden" name="locale" value="<?= e($code) ?>">
+              <button class="jura-btn" type="submit" title="Створити переклад (<?= e($code) ?>)"
+                onclick="this.disabled=true;this.form.submit()"
+                style="padding:.1rem .4rem;font-size:.72rem;background:#f8fafc;color:#475569;border:1px dashed #cbd5e1">+<?= e($code) ?></button>
+            </form>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+        <?php else: ?>
+          <div style="margin-top:.35rem;color:#94a3b8;font-size:.72rem">переклад #<?= $rootId ?></div>
         <?php endif; ?>
       </td>
       <td><input form="cat-<?= (int) $c['id'] ?>" class="jura-input" type="number" name="sort_order" value="<?= (int) $c['sort_order'] ?>" style="width:70px;margin:0"></td>
