@@ -203,7 +203,7 @@ $configInfo = $config_info ?? [];
   <p style="color:#888">Файлів міграцій не знайдено в <code>migrations/</code>.</p>
   <?php else: ?>
   <table class="jura-table" style="margin-bottom:0">
-    <thead><tr><th>Файл міграції</th><th style="width:140px">Статус</th><th style="width:170px">Виконано</th><th style="width:110px">Дія</th></tr></thead>
+    <thead><tr><th>Файл міграції</th><th style="width:140px">Статус</th><th style="width:170px">Виконано</th><th style="width:170px">Дія</th></tr></thead>
     <tbody>
     <?php foreach ($migrations as $m): ?>
       <tr>
@@ -221,7 +221,7 @@ $configInfo = $config_info ?? [];
           <?php endif; ?>
         </td>
         <td style="font-size:.82rem;color:#64748b"><?= e($m['executed_at'] ?? '—') ?></td>
-        <td>
+        <td style="white-space:nowrap;display:flex;gap:.35rem">
           <?php if (!$m['executed']): ?>
           <form method="post" action="/admin/gitdeploy/migrations/run" style="margin:0">
             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
@@ -229,6 +229,11 @@ $configInfo = $config_info ?? [];
             <button class="jura-btn jura-btn-secondary" style="padding:.3rem .6rem;font-size:.8rem" type="submit">▶ Запустити</button>
           </form>
           <?php else: ?>
+          <button type="button" class="jura-btn jura-btn-secondary gd-log-toggle" style="padding:.3rem .6rem;font-size:.8rem"
+            onclick="gdToggleLog(this)"
+            data-name="міграція: <?= e($m['name']) ?>"
+            data-output="<?= e((string) ($m['output'] ?? '')) ?>"
+            data-changed="">Переглянути лог</button>
           <form method="post" action="/admin/gitdeploy/migrations/rerun" style="margin:0" onsubmit="return confirm('Запустити повторно: <?= e($m['name']) ?>?\nЗапис з історії буде видалено, і міграція виконається заново.')">
             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
             <input type="hidden" name="migration" value="<?= e($m['name']) ?>">

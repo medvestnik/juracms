@@ -919,11 +919,17 @@ function git_deploy_is_query_migration(string $filename): bool
 
 function git_deploy_get_migrations(PDO $pdo): array
 {
+    // Keyed by migration so a run's output stays attached to its row and can
+    // be reopened at any time -- previously only SELECTed migration/executed_at,
+    // so the output a migration already stored on execution (see
+    // git_deploy_run_migration below) sat in the table unused by this list;
+    // the admin could only see it once, via the one-shot session flash right
+    // after clicking "run", and it was gone on the next page load.
     $executed = [];
     try {
-        $stmt = $pdo->query('SELECT migration, executed_at FROM ' . jura_table('gitdeploy_migrations') . ' ORDER BY migration');
+        $stmt = $pdo->query('SELECT migration, executed_at, output FROM ' . jura_table('gitdeploy_migrations') . ' ORDER BY migration');
         foreach ($stmt->fetchAll() as $row) {
-            $executed[$row['migration']] = $row['executed_at'];
+            $executed[$row['migration']] = $row;
         }
     } catch (\Throwable) {
         // table not migrated yet on this request
@@ -935,7 +941,8 @@ function git_deploy_get_migrations(PDO $pdo): array
         $files[] = [
             'name' => $name,
             'executed' => isset($executed[$name]),
-            'executed_at' => $executed[$name] ?? null,
+            'executed_at' => $executed[$name]['executed_at'] ?? null,
+            'output' => $executed[$name]['output'] ?? null,
             'is_query' => git_deploy_is_query_migration($name),
         ];
     }
