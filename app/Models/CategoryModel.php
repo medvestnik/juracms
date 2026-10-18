@@ -68,6 +68,32 @@ final class CategoryModel
         return $stmt->fetch() ?: null;
     }
 
+    /** A locale's categories that actually have at least one published post,
+     * for the blog listing's category filter -- no point linking to an empty
+     * category. */
+    public static function publishedForLocale(PDO $pdo, string $locale): array
+    {
+        $stmt = $pdo->prepare(
+            'SELECT c.id,c.title,c.slug,COUNT(*) post_count FROM ' . jura_table('post_categories') . ' c '
+            . 'INNER JOIN ' . jura_table('post_category_relations') . ' r ON r.category_id=c.id '
+            . 'INNER JOIN ' . jura_table('posts') . " p ON p.id=r.post_id AND p.status='published' AND (p.locale=:locale OR p.locale='') "
+            . "WHERE (c.locale=:locale OR c.locale='') "
+            . 'GROUP BY c.id,c.title,c.slug ORDER BY c.sort_order,c.title'
+        );
+        $stmt->execute(['locale' => $locale]);
+        return $stmt->fetchAll();
+    }
+
+    /** Resolves a category for the blog filter by slug, restricted to the
+     * given locale (plus pre-locale legacy rows) -- same fallback as
+     * options(). */
+    public static function findBySlugForLocale(PDO $pdo, string $slug, string $locale): ?array
+    {
+        $stmt = $pdo->prepare("SELECT * FROM " . jura_table('post_categories') . " WHERE slug=? AND (locale=? OR locale='') LIMIT 1");
+        $stmt->execute([$slug, $locale]);
+        return $stmt->fetch() ?: null;
+    }
+
     public static function delete(PDO $pdo, int $id): void
     {
         $pdo->prepare('DELETE FROM ' . jura_table('post_category_relations') . ' WHERE category_id=?')->execute([$id]);

@@ -72,18 +72,39 @@ final class PostModel
     /** Posts inserted directly (old migrations, manual SQL) can predate the
      * locale column and sit at '' — treat those as belonging to every locale
      * rather than vanishing from the blog until someone explicitly assigns
-     * them one. */
-    public static function countPublishedForLocale(PDO $pdo, string $locale): int
+     * them one. $categoryId optionally restricts to one category (for the
+     * blog listing's category filter). */
+    public static function countPublishedForLocale(PDO $pdo, string $locale, ?int $categoryId = null): int
     {
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " WHERE status='published' AND (locale=? OR locale='')");
-        $stmt->execute([$locale]);
+        $stmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM ' . jura_table('posts') . ' p '
+            . 'LEFT JOIN ' . jura_table('post_category_relations') . ' r ON r.post_id=p.id '
+            . "WHERE p.status='published' AND (p.locale=:locale OR p.locale='')"
+            . ($categoryId ? ' AND r.category_id=:cat' : '')
+        );
+        $params = ['locale' => $locale];
+        if ($categoryId) {
+            $params['cat'] = $categoryId;
+        }
+        $stmt->execute($params);
         return (int) $stmt->fetchColumn();
     }
 
-    public static function paginatePublishedForLocale(PDO $pdo, string $locale, int $perPage, int $offset): array
+    public static function paginatePublishedForLocale(PDO $pdo, string $locale, int $perPage, int $offset, ?int $categoryId = null): array
     {
-        $stmt = $pdo->prepare('SELECT * FROM ' . jura_table('posts') . " WHERE status='published' AND (locale=? OR locale='') ORDER BY published_at DESC, id DESC LIMIT {$perPage} OFFSET {$offset}");
-        $stmt->execute([$locale]);
+        $stmt = $pdo->prepare(
+            'SELECT p.*,c.title category_title FROM ' . jura_table('posts') . ' p '
+            . 'LEFT JOIN ' . jura_table('post_category_relations') . ' r ON r.post_id=p.id '
+            . 'LEFT JOIN ' . jura_table('post_categories') . ' c ON c.id=r.category_id '
+            . "WHERE p.status='published' AND (p.locale=:locale OR p.locale='')"
+            . ($categoryId ? ' AND r.category_id=:cat' : '')
+            . " ORDER BY p.published_at DESC, p.id DESC LIMIT {$perPage} OFFSET {$offset}"
+        );
+        $params = ['locale' => $locale];
+        if ($categoryId) {
+            $params['cat'] = $categoryId;
+        }
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 

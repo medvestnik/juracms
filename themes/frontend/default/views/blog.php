@@ -2,10 +2,21 @@
 $posts = $posts ?? [];
 $page = $page ?? [];
 $pagination = $pagination ?? ['current' => 1, 'total' => 1, 'per_page' => 12];
+$categories = $categories ?? [];
+$activeCategory = $active_category ?? null;
 ?>
 <section class="section">
   <div class="site-container">
     <h1 class="section-title"><?= e($page['title'] ?? 'Блог') ?></h1>
+
+    <?php if (!empty($categories)): ?>
+    <nav class="category-filter" aria-label="Фільтр за категоріями">
+      <a href="/blog" class="<?= !$activeCategory ? 'is-active' : '' ?>">Усі</a>
+      <?php foreach ($categories as $cat): ?>
+      <a href="/blog?category=<?= e($cat['slug']) ?>" class="<?= ($activeCategory && $activeCategory['id'] == $cat['id']) ? 'is-active' : '' ?>"><?= e($cat['title']) ?> <span><?= (int) $cat['post_count'] ?></span></a>
+      <?php endforeach; ?>
+    </nav>
+    <?php endif; ?>
 
     <?php if (empty($posts)): ?>
     <div class="empty-state">Публікацій ще немає.</div>
@@ -26,13 +37,15 @@ $pagination = $pagination ?? ['current' => 1, 'total' => 1, 'per_page' => 12];
       <?php endforeach; ?>
     </div>
 
-    <?php if (($pagination['total'] ?? 1) > 1): $cur = (int) $pagination['current']; $total = (int) $pagination['total']; ?>
+    <?php if (($pagination['total'] ?? 1) > 1): $cur = (int) $pagination['current']; $total = (int) $pagination['total'];
+      $pageUrl = static fn(int $p): string => $activeCategory ? ('?category=' . e($activeCategory['slug']) . '&page=' . $p) : ('?page=' . $p);
+    ?>
     <nav class="pagination">
-      <?php if ($cur > 1): ?><a href="?page=<?= $cur - 1 ?>">&larr;</a><?php endif; ?>
+      <?php if ($cur > 1): ?><a href="<?= $pageUrl($cur - 1) ?>">&larr;</a><?php endif; ?>
       <?php for ($p = 1; $p <= $total; $p++): ?>
-        <?php if ($p === $cur): ?><span class="is-active"><?= $p ?></span><?php else: ?><a href="?page=<?= $p ?>"><?= $p ?></a><?php endif; ?>
+        <?php if ($p === $cur): ?><span class="is-active"><?= $p ?></span><?php else: ?><a href="<?= $pageUrl($p) ?>"><?= $p ?></a><?php endif; ?>
       <?php endfor; ?>
-      <?php if ($cur < $total): ?><a href="?page=<?= $cur + 1 ?>">&rarr;</a><?php endif; ?>
+      <?php if ($cur < $total): ?><a href="<?= $pageUrl($cur + 1) ?>">&rarr;</a><?php endif; ?>
     </nav>
     <?php endif; ?>
     <?php endif; ?>

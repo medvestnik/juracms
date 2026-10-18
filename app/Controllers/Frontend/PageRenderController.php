@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Frontend;
 
 use App\Core\ModuleLoader;
+use App\Models\CategoryModel;
 use App\Models\PageModel;
 use App\Models\PostModel;
 use App\Models\RouteModel;
@@ -31,12 +32,16 @@ final class PageRenderController
 
         if (($page['template'] ?? '') === 'blog') {
             $perPage = max(1, (int) ($settings['blog_per_page'] ?? 12));
-            $totalPosts = PostModel::countPublishedForLocale($pdo, $locale);
+            $categorySlug = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($_GET['category'] ?? '')));
+            $activeCategory = $categorySlug !== '' ? CategoryModel::findBySlugForLocale($pdo, $categorySlug, $locale) : null;
+            $categoryId = $activeCategory ? (int) $activeCategory['id'] : null;
+            $totalPosts = PostModel::countPublishedForLocale($pdo, $locale, $categoryId);
             $totalPages = max(1, (int) ceil($totalPosts / $perPage));
             $currentPage = max(1, min($totalPages, (int) ($_GET['page'] ?? 1)));
             $offset = ($currentPage - 1) * $perPage;
-            $posts = PostModel::paginatePublishedForLocale($pdo, $locale, $perPage, $offset);
-            frontend_render_cached($frontendCacheKey, fn() => view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts, 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage]], $common)));
+            $posts = PostModel::paginatePublishedForLocale($pdo, $locale, $perPage, $offset, $categoryId);
+            $categories = CategoryModel::publishedForLocale($pdo, $locale);
+            frontend_render_cached($frontendCacheKey, fn() => view_frontend('blog', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'posts' => $posts, 'settings' => $settings, 'pagination' => ['current' => $currentPage, 'total' => $totalPages, 'per_page' => $perPage], 'categories' => $categories, 'active_category' => $activeCategory], $common)));
         } elseif (($page['template'] ?? '') === 'contacts') {
             frontend_render_cached($frontendCacheKey, fn() => view_frontend('contacts', array_merge(['title' => $page['meta_title'] ?: $page['title'], 'meta_description' => $page['meta_description'], 'page' => $page, 'settings' => $settings], $common)));
         } elseif (($page['template'] ?? '') === 'home') {
