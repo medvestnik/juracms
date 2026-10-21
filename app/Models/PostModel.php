@@ -9,19 +9,23 @@ use PDO;
 /** Reads/writes jura_posts and its category relation table. */
 final class PostModel
 {
-    public static function count(PDO $pdo, string $locale = '', string $search = ''): int
+    public static function count(PDO $pdo, string $locale = '', string $search = '', ?int $categoryId = null): int
     {
-        [$where, $params] = self::filterClause($locale, $search);
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM ' . jura_table('posts') . " p {$where}");
+        [$where, $params] = self::filterClause($locale, $search, $categoryId);
+        $stmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM ' . jura_table('posts') . ' p '
+            . 'LEFT JOIN ' . jura_table('post_category_relations') . ' r ON r.post_id=p.id '
+            . $where
+        );
         $stmt->execute($params);
         return (int) $stmt->fetchColumn();
     }
 
-    public static function paginate(PDO $pdo, string $orderCol, string $dir, int $perPage, int $offset, string $locale = '', string $search = ''): array
+    public static function paginate(PDO $pdo, string $orderCol, string $dir, int $perPage, int $offset, string $locale = '', string $search = '', ?int $categoryId = null): array
     {
-        [$where, $params] = self::filterClause($locale, $search);
+        [$where, $params] = self::filterClause($locale, $search, $categoryId);
         $stmt = $pdo->prepare(
-            "SELECT p.*,c.title category_title FROM " . jura_table('posts') . " p "
+            "SELECT p.*,c.id category_filter_id,c.title category_title FROM " . jura_table('posts') . " p "
             . "LEFT JOIN " . jura_table('post_category_relations') . " r ON r.post_id=p.id "
             . "LEFT JOIN " . jura_table('post_categories') . " c ON c.id=r.category_id "
             . "{$where} ORDER BY {$orderCol} {$dir}, p.id DESC LIMIT {$perPage} OFFSET {$offset}"
@@ -30,8 +34,10 @@ final class PostModel
         return $stmt->fetchAll();
     }
 
-    /** [WHERE clause, bound params] for the admin list's language filter + title search. */
-    private static function filterClause(string $locale, string $search): array
+    /** [WHERE clause, bound params] for the admin list's language/category filter + title search.
+     * Both count() and paginate() already LEFT JOIN post_category_relations r, so the category
+     * filter here just adds a condition on it rather than joining again. */
+    private static function filterClause(string $locale, string $search, ?int $categoryId = null): array
     {
         $clauses = [];
         $params = [];
@@ -42,6 +48,10 @@ final class PostModel
         if ($search !== '') {
             $clauses[] = 'p.title LIKE :search';
             $params['search'] = '%' . $search . '%';
+        }
+        if ($categoryId) {
+            $clauses[] = 'r.category_id=:cat';
+            $params['cat'] = $categoryId;
         }
         return [$clauses ? 'WHERE ' . implode(' AND ', $clauses) : '', $params];
     }

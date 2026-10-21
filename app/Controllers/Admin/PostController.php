@@ -32,13 +32,15 @@ final class PostController
         $perPage = in_array((int) ($_GET['per_page'] ?? 20), $perPageOpts) ? (int) ($_GET['per_page'] ?? 20) : 20;
         $locale = preg_replace('/[^a-z0-9-]/', '', strtolower((string) ($_GET['locale'] ?? '')));
         $search = trim((string) ($_GET['q'] ?? ''));
-        $total = PostModel::count($pdo, $locale, $search);
+        $categoryId = (int) ($_GET['category_id'] ?? 0) ?: null;
+        $total = PostModel::count($pdo, $locale, $search, $categoryId);
         $totalPages = max(1, (int) ceil($total / $perPage));
         $curPage = max(1, min($totalPages, (int) ($_GET['page'] ?? 1)));
         $offset = ($curPage - 1) * $perPage;
+        $activeCategory = $categoryId ? CategoryModel::find($pdo, $categoryId) : null;
         view_admin('posts', [
             'title' => 'Публікації',
-            'posts' => PostModel::paginate($pdo, $sortMap[$sort], $dir, $perPage, $offset, $locale, $search),
+            'posts' => PostModel::paginate($pdo, $sortMap[$sort], $dir, $perPage, $offset, $locale, $search, $categoryId),
             'sort' => $sort,
             'dir' => $dir,
             'per_page' => $perPage,
@@ -48,6 +50,8 @@ final class PostController
             'total' => $total,
             'locale' => $locale,
             'q' => $search,
+            'category_id' => $categoryId,
+            'active_category' => $activeCategory,
             'all_locales' => jura_available_locales($pdo),
         ]);
         exit;

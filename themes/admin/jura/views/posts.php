@@ -10,11 +10,13 @@ $total       = $total ?? 0;
 $locale      = $locale ?? '';
 $q           = $q ?? '';
 $allLocales  = $all_locales ?? [];
+$categoryId  = $category_id ?? null;
+$activeCategory = $active_category ?? null;
 
 $sortMap = ['date'=>'За датою','title'=>'За назвою','id'=>'За ID','order'=>'Вручну','locale'=>'За мовою'];
 
 // Build a query string with specific overrides
-$qBase = ['sort'=>$sort,'dir'=>strtolower($dir),'per_page'=>$perPage,'page'=>$curPage,'locale'=>$locale,'q'=>$q];
+$qBase = ['sort'=>$sort,'dir'=>strtolower($dir),'per_page'=>$perPage,'page'=>$curPage,'locale'=>$locale,'q'=>$q,'category_id'=>$categoryId];
 $urlWith = function(array $overrides) use ($qBase): string {
     return '?' . http_build_query(array_merge($qBase, $overrides));
 };
@@ -63,8 +65,14 @@ $localeLabel = function(string $code) use ($allLocales): string {
     </select>
     <?php endif; ?>
     <button class="jura-btn jura-btn-secondary" type="submit" style="padding:.3rem .65rem;font-size:.83rem">Знайти</button>
-    <?php if ($locale !== '' || $q !== ''): ?>
-    <a class="jura-btn" href="<?= $urlWith(['locale'=>'','q'=>'','page'=>1]) ?>" style="padding:.3rem .65rem;font-size:.83rem;color:#64748b">✕ Скинути</a>
+    <?php if ($activeCategory): ?>
+    <span style="display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .6rem;border-radius:999px;background:#eef2ff;color:#4338ca;font-size:.8rem;font-weight:600">
+      Категорія: <?= e($activeCategory['title']) ?>
+      <a href="<?= $urlWith(['category_id'=>null,'page'=>1]) ?>" style="color:#4338ca;text-decoration:none" title="Прибрати фільтр">✕</a>
+    </span>
+    <?php endif; ?>
+    <?php if ($locale !== '' || $q !== '' || $categoryId): ?>
+    <a class="jura-btn" href="<?= $urlWith(['locale'=>'','q'=>'','category_id'=>null,'page'=>1]) ?>" style="padding:.3rem .65rem;font-size:.83rem;color:#64748b">✕ Скинути</a>
     <?php endif; ?>
   </form>
   <form method="get" style="display:flex;align-items:center;gap:.35rem;font-size:.83rem">
@@ -72,6 +80,7 @@ $localeLabel = function(string $code) use ($allLocales): string {
     <input type="hidden" name="dir" value="<?= e(strtolower($dir)) ?>">
     <input type="hidden" name="locale" value="<?= e($locale) ?>">
     <input type="hidden" name="q" value="<?= e($q) ?>">
+    <input type="hidden" name="category_id" value="<?= e((string) $categoryId) ?>">
     <input type="hidden" name="page" value="1">
     <label style="color:#64748b">Записів:</label>
     <select name="per_page" class="jura-input" style="padding:.2rem .4rem;font-size:.83rem;width:auto" onchange="this.form.submit()">
@@ -107,7 +116,13 @@ $localeLabel = function(string $code) use ($allLocales): string {
         <?php endif; ?>
         <td style="color:#94a3b8;font-size:.8rem"><?= (int)$p['id'] ?></td>
         <td><?= e($p['title']) ?></td>
-        <td style="font-size:.82rem;color:#64748b"><?= e($p['category_title'] ?? '—') ?></td>
+        <td style="font-size:.82rem;color:#64748b">
+          <?php if (!empty($p['category_filter_id'])): ?>
+          <a href="<?= $urlWith(['category_id'=>(int) $p['category_filter_id'],'page'=>1]) ?>" style="color:inherit;text-decoration:underline;text-decoration-style:dotted" title="Показати лише цю категорію"><?= e($p['category_title']) ?></a>
+          <?php else: ?>
+          —
+          <?php endif; ?>
+        </td>
         <td style="font-size:.78rem"><span style="display:inline-block;padding:.1rem .45rem;border-radius:999px;background:#eef2ff;color:#4338ca;font-weight:600"><?= e($localeLabel((string) ($p['locale'] ?? ''))) ?></span></td>
         <td>
           <form method="post" action="/admin/posts/<?= (int)$p['id'] ?>/toggle" style="margin:0;display:inline">

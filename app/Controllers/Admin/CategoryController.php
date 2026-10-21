@@ -54,10 +54,12 @@ final class CategoryController
             }
             redirect('/admin/categories');
         }
+        [, $defaultLocale] = LocaleModel::active($pdo);
         view_admin('categories', [
             'title' => 'Категорії публікацій',
             'categories' => CategoryModel::all($pdo),
             'all_locales' => jura_available_locales($pdo),
+            'default_locale' => $defaultLocale,
         ]);
         exit;
     }

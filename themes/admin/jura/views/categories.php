@@ -1,6 +1,7 @@
 <?php
 $categories = $categories ?? [];
 $allLocales = $all_locales ?? [];
+$defaultLocale = $default_locale ?? 'uk';
 
 // Group every row by its translation root so each root can show, inline, a
 // "+code" button for every active locale it doesn't have a translation in
@@ -10,6 +11,13 @@ foreach ($categories as $c) {
     $rootId = (int) ($c['translation_of'] ?: $c['id']);
     $byRoot[$rootId][(string) $c['locale']] = $c;
 }
+// Same no-prefix-for-default-locale convention PostController uses when it
+// saves a post's own route.
+$blogUrl = static function (array $c) use ($defaultLocale): string {
+    $locale = (string) $c['locale'];
+    $prefix = ($locale !== '' && $locale !== $defaultLocale) ? '/' . $locale : '';
+    return $prefix . '/blog?category=' . rawurlencode((string) $c['slug']);
+};
 ?>
 
 <section class="jura-card" style="margin-bottom:1rem">
@@ -95,6 +103,7 @@ foreach ($categories as $c) {
       <td><?= (int) $c['post_count'] ?></td>
       <td style="white-space:nowrap;display:flex;gap:.4rem">
         <button form="cat-<?= (int) $c['id'] ?>" class="jura-btn jura-btn-secondary" type="submit" style="padding:.3rem .6rem;font-size:.8rem">✓</button>
+        <a class="jura-btn jura-btn-secondary" href="<?= e($blogUrl($c)) ?>" target="_blank" rel="noopener" style="padding:.3rem .6rem;font-size:.8rem" title="Переглянути на сайті">👁</a>
         <form method="post" style="margin:0">
           <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
           <input type="hidden" name="action" value="delete">
