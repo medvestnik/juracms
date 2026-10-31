@@ -216,25 +216,35 @@ function git_deploy_get_info(PDO $pdo, bool $forceFetch = false): array
     $info['commit'] = trim(safe_shell_exec($git . ' log -1 --format="%h - %s (%ai)" 2>&1'));
     $info['remote'] = trim(safe_shell_exec($git . ' remote get-url origin 2>&1'));
 
+    // Recalculate against origin/<current branch>. A failed fetch or a
+    // missing upstream must not be represented as "0 commits behind".
     $cacheFile = git_deploy_behind_cache_path($pdo);
     $ttl = 300;
-    if ($forceFetch || !file_exists($cacheFile) || (time() - filemtime($cacheFile)) > $ttl) {
-        safe_shell_exec($git . ' fetch origin 2>&1');
-        $behind = trim(safe_shell_exec($git . ' rev-list HEAD..@{u} --count 2>&1'));
-        @file_put_contents($cacheFile, ctype_digit($behind) ? $behind : '0');
+    $branch = (string)$info['branch'];
+    $remoteRef = 'refs/remotes/origin/' . $branch;
+    $behind = null;
+    if ($forceFetch || !is_file($cacheFile) || (time() - (int)@filemtime($cacheFile)) > $ttl) {
+        $fetchOutput = (string)safe_shell_exec($git . ' fetch origin ' . escapeshellarg($branch) . ' 2>&1');
+        $fetchFailed = preg_match('/(?:fatal:|error:|Authentication failed|could not read Username|Repository not found)/i', $fetchOutput) === 1;
+        if (!$fetchFailed) {
+            $remoteExists = trim((string)safe_shell_exec($git . ' rev-parse --verify ' . escapeshellarg($remoteRef) . ' 2>&1'));
+            if (preg_match('/^[a-f0-9]{40,64}$/i', $remoteExists)) {
+                $count = trim((string)safe_shell_exec($git . ' rev-list --count ' . escapeshellarg('HEAD..' . $remoteRef) . ' 2>&1'));
+                if (ctype_digit($count)) $behind = (int)$count;
+            }
+        }
+        if ($behind !== null) {
+            @file_put_contents($cacheFile, $branch . ':' . $behind);
+        } else {
+            @unlink($cacheFile);
+        }
     } else {
-        $behind = (string) @file_get_contents($cacheFile);
+        $cached = trim((string)@file_get_contents($cacheFile));
+        if (preg_match('/^' . preg_quote($branch, '/') . ':(\\d+)$/', $cached, $match)) {
+            $behind = (int)$match[1];
+        }
     }
-    $info['behind'] = ctype_digit(trim($behind)) ? (int) trim($behind) : 0;
-    $upstream = trim(safe_shell_exec($git . ' rev-parse --abbrev-ref --symbolic-full-name @{u} 2>&1'));
-    if ($upstream === '' || str_contains($upstream, 'fatal')) {
-        $upstream = 'origin/' . $info['branch'];
-    }
-    if ($upstream !== '') {
-        $ahead = trim(safe_shell_exec($git . ' rev-list --count ' . escapeshellarg($upstream . '..HEAD') . ' 2>&1'));
-        $info['ahead'] = ctype_digit($ahead) ? (int) $ahead : 0;
-    }
-
+    $info['behind'] = $behind;
     $stmt = $pdo->prepare('SELECT changed_files,executed_at FROM ' . jura_table('gitdeploy_log') . " WHERE type='pull' AND success=1 ORDER BY id DESC LIMIT 1");
     $stmt->execute();
     $row = $stmt->fetch();
