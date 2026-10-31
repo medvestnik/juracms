@@ -50,7 +50,8 @@ final class FormController
         catch(\Throwable $e) { error_log('JuraCMS lead notification failed: '.$e->getMessage()); }
         $thankyouUrl=trim((string)($settings['thankyou_page']??''));
         if($thankyouUrl!=='' && str_starts_with($thankyouUrl,'/') && !str_starts_with($thankyouUrl,'//')) {
-            redirect($thankyouUrl);
+            $thankyouPath=(string)(parse_url($thankyouUrl,PHP_URL_PATH)?:'');
+            if($thankyouPath!=='' && \App\Models\RouteModel::find($pdo,$thankyouPath))redirect($thankyouUrl);
         }
         $referrer=(string)($_SERVER['HTTP_REFERER']??'/contacts');
         $refpath=(string)(parse_url($referrer,PHP_URL_PATH)?:'/contacts');
