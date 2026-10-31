@@ -91,7 +91,7 @@ $configInfo = $config_info ?? [];
     <tr><td style="padding:.3rem 0;color:#94a3b8;width:160px">Гілка</td><td><?= e($info['branch'] ?? '—') ?></td></tr>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Останній коміт</td><td><?= e($info['commit'] ?? '—') ?></td></tr>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Remote</td><td><code><?= e($info['remote'] ?? '—') ?></code></td></tr>
-    <tr><td style="padding:.3rem 0;color:#94a3b8">Позаду origin</td><td><?= (int) ($info['behind'] ?? 0) ?> комітів</td></tr>
+    <tr><td style="padding:.3rem 0;color:#94a3b8">Позаду origin</td><td><?= isset($info['behind']) ? ((int)$info['behind'] . ' комітів') : 'Невідомо — перевірте з’єднання з origin' ?></td></tr>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Попереду origin</td><td><?= (int) ($info['ahead'] ?? 0) ?> комітів</td></tr>
     <?php $authStatus = $auth_status ?? null; if ($authStatus): ?>
     <tr><td style="padding:.3rem 0;color:#94a3b8">Автентифікація</td><td>
