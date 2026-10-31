@@ -11,6 +11,7 @@ require_once __DIR__ . '/core/start.php';
 use App\Controllers\Admin\AuthController;
 use App\Controllers\Admin\CategoryController;
 use App\Controllers\Admin\DashboardController;
+use App\Controllers\Admin\FormSubmissionsController;
 use App\Controllers\Admin\LocaleController;
 use App\Controllers\Admin\MaintenanceController;
 use App\Controllers\Admin\MediaController;
@@ -97,6 +98,10 @@ if (str_starts_with($path, '/admin')) {
     }
     if ($path === '/admin/update-library' && $method === 'POST') {
         SettingsController::updateLibrary($pdo);
+    }
+
+    if ($path === '/admin/form-submissions' && $method === 'GET') {
+        FormSubmissionsController::index($pdo);
     }
 
     if ($path === '/admin/pages' && $method === 'GET') {
