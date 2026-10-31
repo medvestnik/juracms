@@ -224,7 +224,7 @@ function git_deploy_get_info(PDO $pdo, bool $forceFetch = false): array
     $remoteRef = 'refs/remotes/origin/' . $branch;
     $behind = null;
     if ($forceFetch || !is_file($cacheFile) || (time() - (int)@filemtime($cacheFile)) > $ttl) {
-        $fetchOutput = (string)safe_shell_exec($git . ' fetch origin ' . escapeshellarg($branch) . ' 2>&1');
+        $fetchOutput = (string)safe_shell_exec($git . ' fetch --no-tags origin ' . escapeshellarg('+refs/heads/' . $branch . ':refs/remotes/origin/' . $branch) . ' 2>&1');
         $fetchFailed = preg_match('/(?:fatal:|error:|Authentication failed|could not read Username|Repository not found)/i', $fetchOutput) === 1;
         if (!$fetchFailed) {
             $remoteExists = trim((string)safe_shell_exec($git . ' rev-parse --verify ' . escapeshellarg($remoteRef) . ' 2>&1'));
