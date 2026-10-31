@@ -43,6 +43,12 @@ final class BlockRegistry
         return $labels;
     }
 
+    /** Whether this page block accepts an image upload in the native editor. */
+    public static function supportsImage(string $type): bool
+    {
+        return $type === 'image' || !empty(self::$types[$type]['supports_image']);
+    }
+
     public static function label(string $type): string
     {
         return (string) (self::$types[$type]['label'] ?? $type);
