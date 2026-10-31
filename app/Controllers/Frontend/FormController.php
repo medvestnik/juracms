@@ -35,11 +35,26 @@ final class FormController
                 redirect($referrer . $separator . 'form_error=' . rawurlencode($formCode));
             }
         }
-        $payload = $_POST;
-        unset($payload['_token'], $payload['g-recaptcha-response']);
-        FormSubmissionModel::insert($pdo, $formCode, $payload);
-        LeadNotifier::notify($pdo, $formCode, $payload);
-        $thankyouUrl = trim((string) ($settings['thankyou_page'] ?? ''));
-        redirect($thankyouUrl !== '' ? $thankyouUrl : (string) ($_SERVER['HTTP_REFERER'] ?? '/'));
+        $name=trim((string)($_POST['name']??''));
+        $phone=trim((string)($_POST['phone']??''));
+        if($name==='' || ($phone==='' && trim((string)($_POST['email']??''))==='')){
+            redirect('/contacts?form_error='.rawurlencode($formCode));
+        }
+        if(!empty($_POST['website_url'])) {
+            redirect('/contacts?form_sent='.rawurlencode($formCode));
+        }
+        $payload=$_POST;
+        unset($payload['_token'],$payload['g-recaptcha-response'],$payload['website_url']);
+        FormSubmissionModel::insert($pdo,$formCode,$payload);
+        try { LeadNotifier::notify($pdo,$formCode,$payload); }
+        catch(\Throwable $e) { error_log('JuraCMS lead notification failed: '.$e->getMessage()); }
+        $thankyouUrl=trim((string)($settings['thankyou_page']??''));
+        if($thankyouUrl!=='' && str_starts_with($thankyouUrl,'/') && !str_starts_with($thankyouUrl,'//')) {
+            redirect($thankyouUrl);
+        }
+        $referrer=(string)($_SERVER['HTTP_REFERER']??'/contacts');
+        $refpath=(string)(parse_url($referrer,PHP_URL_PATH)?:'/contacts');
+        if(!str_starts_with($refpath,'/') || str_starts_with($refpath,'//'))$refpath='/contacts';
+        redirect($refpath.'?form_sent='.rawurlencode($formCode));
     }
 }
