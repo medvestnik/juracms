@@ -161,7 +161,7 @@ endif; ?>
         <?= \App\Core\BlockRegistry::adminForm($type, $settings) ?>
         <button class="jura-btn jura-btn-secondary" type="submit" style="margin-top:.75rem">Зберегти блок</button>
       </form>
-      <?php if ($type === 'image'): ?>
+      <?php if (\App\Core\BlockRegistry::supportsImage($type)): ?>
       <form method="post" action="/admin/pages/<?= $id ?>/blocks/<?= $bid ?>/upload-image" enctype="multipart/form-data" style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--jura-border,#e2e8f0)">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
