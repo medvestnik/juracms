@@ -193,19 +193,31 @@ final class PageController
             }
             $file = $_FILES['image'] ?? null;
             if ($file && $file['error'] === UPLOAD_ERR_OK) {
-                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
-                    $filename = 'block-' . $blockId . '-' . time() . '.' . $ext;
-                    if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
-                        $oldImg = $settings['image'] ?? null;
-                        if ($oldImg && str_starts_with((string) $oldImg, 'block-') && file_exists($uploadDir . $oldImg)) {
+                $tmp = (string) ($file['tmp_name'] ?? '');
+                $info = $tmp !== '' && is_uploaded_file($tmp) ? @getimagesize($tmp) : false;
+                $mime = is_array($info) ? (string) ($info['mime'] ?? '') : '';
+                $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+                if ((int) ($file['size'] ?? 0) > 0
+                    && (int) $file['size'] <= 5 * 1024 * 1024
+                    && isset($extensions[$mime])
+                    && (int) ($info[0] ?? 0) <= 8000
+                    && (int) ($info[1] ?? 0) <= 8000
+                ) {
+                    $filename = 'block-' . $blockId . '-' . bin2hex(random_bytes(12)) . '.' . $extensions[$mime];
+                    if (move_uploaded_file($tmp, $uploadDir . $filename)) {
+                        $oldImg = (string) ($settings['image'] ?? '');
+                        if (preg_match('/^block-[A-Za-z0-9_.-]+$/', $oldImg) && is_file($uploadDir . $oldImg)) {
                             @unlink($uploadDir . $oldImg);
                         }
                         $settings['image'] = $filename;
                     }
                 }
             } elseif (!empty($_POST['remove_image'])) {
-                $settings['image'] = null;
+                $oldImg = (string) ($settings['image'] ?? '');
+                if (preg_match('/^block-[A-Za-z0-9_.-]+$/', $oldImg) && is_file($uploadDir . $oldImg)) {
+                    @unlink($uploadDir . $oldImg);
+                }
+                $settings['image'] = '';
             }
             PageBlockModel::updateSettings($pdo, $blockId, $settings);
         }
