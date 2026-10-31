@@ -24,6 +24,7 @@ final class LeadNotifier
             'phone'   => 'Телефон',
             'email'   => 'Email',
             'message' => 'Повідомлення',
+            'topic'   => 'Тема',
             'locale'  => null,
         ];
         $message = "Нова заявка з сайту — {$formLabel}\n\n";
