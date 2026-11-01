@@ -115,6 +115,11 @@
         <input class="jura-input" name="settings[notification_email_to]" value="<?= e($s['notification_email_to'] ?? '') ?>" placeholder="manager@example.com">
       </div>
       <div>
+        <label class="jura-label">Маска телефону для форм</label>
+        <input class="jura-input" name="settings[form_phone_mask]" value="<?= e($s['form_phone_mask'] ?? '+38 (0XX) XXX-XX-XX') ?>" placeholder="+38 (0XX) XXX-XX-XX">
+        <small style="color:#64748b">X — цифра номера. За замовчуванням — український номер +380. Перевірка формату здійснюється і на сервері.</small>
+      </div>
+      <div>
         <label class="jura-label">Telegram bot token</label>
         <input class="jura-input" name="settings[telegram_bot_token]" value="<?= e($s['telegram_bot_token'] ?? '') ?>">
       </div>
