@@ -33,7 +33,7 @@ final class SettingsController
             if (str_starts_with((string) $key, 'telegram_') || (string) $key === 'notification_email_to') {
                 $group = 'notifications';
             }
-            if ((string) $key === 'thankyou_page') {
+            if (in_array((string) $key, ['thankyou_page', 'form_phone_mask'], true)) {
                 $group = 'forms';
             }
             if ((string) $key === 'blog_per_page') {
