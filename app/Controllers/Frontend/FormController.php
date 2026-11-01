@@ -40,6 +40,15 @@ final class FormController
         if($name==='' || ($phone==='' && trim((string)($_POST['email']??''))==='')){
             redirect('/contacts?form_error='.rawurlencode($formCode));
         }
+        // Always validate Ukrainian contact numbers server-side; JS masks are UX only.
+        if($phone!==''){
+            $digits=preg_replace('/\\D+/', '', $phone);
+            if(str_starts_with($digits,'0') && strlen($digits)===10)$digits='38'.$digits;
+            if(!preg_match('/^380[0-9]{9}$/D',(string)$digits)){
+                redirect('/contacts?form_error=phone');
+            }
+            $_POST['phone']='+'.$digits;
+        }
         if(!empty($_POST['website_url'])) {
             redirect('/contacts?form_sent='.rawurlencode($formCode));
         }
